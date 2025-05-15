@@ -1,0 +1,465 @@
+### Helper Functions for Scanpy Workflows:
+'''
+Contains...
+    - check_adata_format
+    - join_adatas
+    - assign_celltype_class
+    - create_umaps
+    - apply_celltypist
+    - mtx_to_adata
+    - add_gene_names_to_adata
+    - subset_adata_by_cell_type
+'''
+import pandas as pd
+import scanpy as sc
+import numpy as np
+import scipy.sparse
+import anndata as an
+import harmonypy # type: ignore
+import matplotlib
+import matplotlib.colors as mcolors
+#import celltypist # type: ignore #moved to celltypist def
+#from celltypist import models # type: ignore #moved to celltypist def 
+import random
+from pybiomart import Server, Dataset # type: ignore
+import sklearn
+
+def check_adata_format(adatas, batches, data_sources, celltype_colnames, subtype_colnames, condition_colnames, save_intermediate_path=None):
+    '''
+    Input:
+        - adatas: list of adata objects
+        - batches: list of batch column names in same order as adata objects
+        - data_sources: list of data source names in same order as adata objects
+        - celltype_colnames: list of cell type column names in same order as adata objects
+        - subtype_colnames: list of cell type column names in same order as adata objects (set as NA if there is no subtype column available)
+        - condition_colnames: list of condition/phenotype column names in the same order as adata objects
+        - save_intermediate: each passed adata file will be saved to the following path (added later, helpful if joining adatas is running out of memory)
+    '''
+    return_adatas=[]
+    for i, adata in enumerate(adatas):
+        adata=adatas[i]
+        batch=batches[i]
+        data_source=data_sources[i]
+        celltype_colname=celltype_colnames[i]
+        subtype_colname=subtype_colnames[i]
+        condition_colname=condition_colnames[i]
+
+        print(data_source, 'trying to reset counts matrix to raw data...')
+        if 'counts' in adata.layers:
+            print(data_source, ' adata.layers["counts"] exists... resetting counts')
+            adata.X=adata.layers['counts']
+        elif hasattr(adata.raw, 'X'):
+            print(data_source, ' adata.raw.X exists... resetting counts')
+            adata.X=adata.raw.X
+        elif adata.X.max()>20:
+            print('counts matrix is already likely unprocessed. Max counts currently: ', adata.X.max())
+        else:
+            print(data_source, ' no raw data available, continuing with counts as is')
+        
+        adata.var_names_make_unique() #adding to script, determine later if creates issues with joining
+
+        ######################################################### Filtering:
+        print('standard preprocess...')
+        print(data_source, 'pre-filtering steps shape: ', adata.shape)
+        adata.var["mt"] = adata.var_names.str.startswith("MT-") #human mitochondrial genes specified
+        adata.var["ribo"] = adata.var_names.str.startswith(("RPS", "RPL"))
+        adata.var["hb"] = adata.var_names.str.contains("^HB[^(P)]")
+        sc.pp.calculate_qc_metrics(adata, qc_vars=["mt", "ribo", "hb"], inplace=True, log1p=True)
+        
+        sc.pp.filter_cells(adata, min_genes=100)
+        sc.pp.filter_genes(adata, min_cells=3)
+        print('number of cells with greater than 10% mitochondrial genes',len(adata[(adata.obs.pct_counts_mt > 10)]))
+        adata = adata[(adata.obs.pct_counts_mt < 10)] #filtering out cells with greater than 10% mitochondrial genes
+        
+        #Ensuring that batch is category type
+        if adata.obs[batch].dtype.name != 'category':
+            adata.obs[batch] = adata.obs[batch].apply(lambda x: f'Batch{x}' if adata.obs[batch].dtype.name != 'category' else x).astype('category')
+        ######################################################### Scrublet to Identify Doublets:
+        print('starting scrublet analysis')
+        print('pre-scrublet adata shape: ', adata.shape)
+        if batch != None:
+            try:
+                sc.pp.scrublet(adata, batch_key=batch)
+                predicted_doublet_idx=list(adata[adata.obs.predicted_doublet==True].obs.index)
+                print(len(predicted_doublet_idx), " number of doublets predicted across the dataset ", data_source)
+                if len(predicted_doublet_idx) > 0:
+                    adata = adata[~adata.obs.index.isin(predicted_doublet_idx)] #filtering cells in predicted doublet index list out of adata object
+                    print('doublets removed from', data_source, 'new shape: ', adata.shape)
+                else:
+                    print('no doublets to remove from', data_source)
+            except Exception as e:
+                print('scrublet with batch but without batch separation failed for ', data_source)
+                print(f'Error: {str(e)}')
+                batch_ids = adata.obs[batch].unique()
+                predicted_doublet_idx = []
+                for batch in batch_ids:
+                    print("scrubbing batch: ", batch)
+                    adata_batch = adata[adata.obs["batch"] == batch]
+                    sc.pp.scrublet(adata_batch) #performing scrublet on individual batches #may need to look at adjusting number of principal components later
+
+                    predicted_doublet_idx.append(list(adata_batch[adata_batch.obs.predicted_doublet == True].obs.index)) #pulling a list of cell where predicted_doublet is true and adding this to the list of predicted doublet cells for the entire batch
+    
+                flat_predicted_doublet_idx = [cell_id for batch in predicted_doublet_idx for cell_id in batch]
+                print(len(flat_predicted_doublet_idx), ": number of doublets predicted across the dataset ", data_source)     
+                if len(flat_predicted_doublet_idx) > 0:
+                    print('Done with scrublet, starting filter out of doublets')
+                    adata = adata[~adata.obs.index.isin(flat_predicted_doublet_idx)] #filtering cells in predicted doublet index list out of adata object
+                    print('done filtering of doublets from adata ', data_source)
+                else: #no cells to filter out so continue
+                    print(data_source, ' has no predicted doublets. Adata shape: ', adata.shape)
+        else: #batch being None
+            sc.pp.scrublet(adata)
+            predicted_doublet_idx=list(adata[adata.obs.predicted_doublet==True].obs.index)
+            print(len(predicted_doublet_idx), " number of doublets predicted across the dataset ", data_source) 
+            adata = adata[~adata.obs.index.isin(predicted_doublet_idx)] #filtering cells in predicted doublet index list out of adata object
+            print('done filtering of doublets from adata ', data_source)
+        print('adata shape after scrublet: ', adata.shape)
+        ################################################# Normalizing Data:
+        if adata.X.max()<20:
+            print(data_source,' already logged and normalized counts')
+        else:
+            print(adata, 'normalizing and log transforming...')
+            adata.layers["counts"] = adata.X.copy()
+            sc.pp.normalize_total(adata)
+            sc.pp.log1p(adata)
+        
+        ############################################# Feature Selection:
+        try: 
+            adata.var['highly_variable']
+            print(i, ' already has highly variable genes')
+        except:
+            if batch!='None':
+                    sc.pp.highly_variable_genes(adata, n_top_genes=2000, batch_key=batch)
+            else:
+                sc.pp.highly_variable_genes(adata, n_top_genes=2000)
+                
+        ############################################# Standardizing Obs Columns:
+        if 'datasource' not in adata.obs.columns:
+            adata.obs['datasource'] = np.full(adata.obs.shape[0], data_source)
+
+        if celltype_colname != 'Celltype':
+            adata.obs.rename(columns={celltype_colname: 'Celltype'}, inplace=True)
+
+        if subtype_colname != None:
+            if subtype_colname != 'Subtype':
+                adata.obs.rename(columns={subtype_colname: 'Subtype'}, inplace=True)
+        else:
+            adata.obs['Subtype'] = np.full(adata.obs.shape[0], 'NA')
+
+        if condition_colname != 'Condition':
+            adata.obs.rename(columns={condition_colname: 'Condition'}, inplace=True)
+
+        ############################################# PCA + Integration:
+        if batch!=None:
+            try:
+                sc.tl.pca(adata)
+                sc.external.pp.scanorama_integrate(adata, key=batch)
+            except Exception as e:
+                error_msg = str(e)
+                print(f"{data_source}: Scanorama error occurred: {error_msg}")
+                if "non-contiguous batches" in error_msg.lower():
+                    print(f"{data_source}: Attempting to fix non-contiguous batches by sorting...")
+                    try:
+                        adata = adata[np.argsort(adata.obs[batch].values)].copy()
+                        sc.external.pp.scanorama_integrate(adata, key=batch)
+                        print(f"{data_source}: Scanorama successfully rerun with contiguous batches.")
+                    except Exception as inner_e:
+                        print(f"{data_source}: Retry failed after sorting: {inner_e}")
+        else:
+            print('no scanorama since no batch given')
+        #writing to intermediate file if save_intermediate_path:
+        if save_intermediate_path!=None:
+            cur_save_intermediate_path=save_intermediate_path[i]
+            adata.write(cur_save_intermediate_path)
+        return_adatas.append(adata)
+
+    return return_adatas
+
+def join_adatas(adatas, data_sources):
+    '''
+    Input:
+        - adatas: list of adata objects. assumption is that adatas have been run through check_adata_format() first
+        - data_sources: list of data source names in all adatas (order matters)
+    '''
+    for i, adata in enumerate(adatas):
+        data_source=data_sources[i]
+
+        assert 'Celltype' in adata.obs, f"Missing 'Celltype' in {adata}"
+        assert 'Subtype' in adata.obs, f"Missing 'Subtype' in {adata}"
+        assert 'datasource' in adata.obs, f"Missing 'datasource' in {adata}"
+        assert 'Condition' in adata.obs, f"Missing 'Condition' in {adata}"
+        #ensure no duplicated genes:
+        duplicated_genes = adata.var.index[adata.var.index.duplicated()]
+        if len(duplicated_genes) > 0:
+            print('adjusting an adata for duplicated genes...')
+            adata.var_names_make_unique()
+        #ensure no overlapping indexes
+        adata.obs['Barcode'] = adata.obs_names
+        adata.obs_names = [f"{data_source}-" + barcode for barcode in adata.obs_names]
+        
+    ############################################# Joining adata objects:
+    print('joining adatas...')
+    adata_combined = an.concat(adatas, join='inner', keys=data_sources) #only choosing overlapping genes (only same column names in obs will be kept!)
+    print('combined adata shape: ',adata_combined.shape)
+
+    sc.pp.highly_variable_genes(adata_combined, n_top_genes=2000) #rerun highly variable genes with combined data
+    sc.pp.pca(adata_combined) #rerun PCA with combined data before harmony integration
+
+    sc.external.pp.harmony_integrate(adata_combined, key='datasource')
+
+    sc.pp.neighbors(adata_combined, use_rep='X_pca_harmony')
+    sc.tl.umap(adata_combined)
+
+    return adata_combined
+
+
+def assign_celltype_class(celltype):
+    '''
+    Apply with code such as this: 
+    adata_combined.obs['celltype_broad'] = adata_combined.obs.apply(
+    lambda row: sf.assign_celltype_class(row['Celltype']), axis=1
+)
+    '''
+    if isinstance(celltype, str) and (celltype.startswith("Ex-") or celltype.startswith("Exc") or celltype in ['L5', 'L3_L5', 'L2_L3', 'L4_L6', 'L4_L5', 'L5_L6', 'L6'] or celltype.lower().startswith('excitatory neuron') or celltype.lower()=='exc' or celltype.lower() == 'exc' or "CUX2" in celltype or "FEZF2" in celltype or"RORB" in celltype):
+        return "Excitatory neurons"
+    elif isinstance(celltype, str) and (celltype.startswith("In-") or celltype.startswith("Inh") or celltype in ['PV', "5HT3aR", "Rosehip", "SOM"] or celltype.lower().startswith('inhibitory neuron') or celltype.lower()=='inh' or "OPRK1" in celltype or "GABRG1" in celltype):
+        return "Inhibitory neurons"
+    elif isinstance(celltype, str) and (celltype.lower().startswith("ast")):
+        return "Astrocytes"
+    elif isinstance(celltype, str) and (celltype=="Mic" or celltype=="Micro" or celltype.lower().startswith("mic") or "LSP1" in celltype or "LYZ" in celltype or celltype.lower()=='cams'):
+        return "Microglia"
+    elif isinstance(celltype, str) and (celltype=="Endo" or celltype.lower().startswith("end")):
+        return "Endothelial"
+    elif isinstance(celltype, str) and (celltype=="Oli" or celltype.startswith('Oligo') or celltype.endswith("_Oligo") or celltype.lower().startswith("oli") or "PDGFRA" in celltype or "PCDH15" in celltype):
+        return "Oligodendrocytes"
+    elif isinstance(celltype, str) and (celltype=="Vas" or celltype in ['Mural', 'Fibro'] or celltype=="Perivascular_Fibroblast" or celltype.lower()=='per' or celltype.lower()=="pericytes" or celltype=='Fib' or celltype.upper().startswith("SMC") or celltype.lower().startswith("vasc")):
+        return "Vascular Cells"
+    elif isinstance(celltype, str) and (celltype.lower().startswith("t_cell") or celltype.lower().startswith("t cell") or celltype.lower().startswith("b cell") or celltype.lower().startswith("b_cell") or celltype=='T'):
+        return "Immune Cells"
+    elif isinstance(celltype, str) and (celltype.upper().startswith("OPC") or celltype.upper().startswith("OPC_") or "PDGFRA" in celltype):
+        return "OPCs + COPs"
+    else:
+        return celltype
+    
+def assign_celltype_class_mappedannotations(celltype):
+    '''
+    Apply with code such as this: 
+    adata_combined.obs['celltype_broad'] = adata_combined.obs.apply(
+    lambda row: sf.assign_celltype_class(row['Celltype']), axis=1
+)
+    '''
+    if isinstance(celltype, str) and celltype.startswith("Exc"):
+        return "Excitatory neurons"
+    elif isinstance(celltype, str) and celltype.startswith("Inh"):
+        return "Inhibitory neurons"
+    elif isinstance(celltype, str) and celltype.lower().startswith("ast"):
+        return "Astrocytes"
+    elif isinstance(celltype, str) and (celltype.lower().startswith("mic") or celltype.lower()=='cams' or celltype.lower()=='epd'): #setting EPD to microglia since ependymal cells are specialized glial cells
+        return "Microglia"
+    elif isinstance(celltype, str) and celltype.lower().startswith("end"):
+        return "Endothelial"
+    elif isinstance(celltype, str) and celltype.lower().startswith("oli"):
+        return "Oligodendrocytes"
+    elif isinstance(celltype, str) and (celltype.lower()=='per' or celltype.lower()=='fib' or celltype.upper().startswith("SMC") or celltype.upper()=='CPEC'):
+        return "Vascular Cells"
+    elif isinstance(celltype, str) and celltype.upper()=='T':
+        return "Immune Cells"
+    elif isinstance(celltype, str) and celltype.upper().startswith("OPC"):
+        return "OPCs + COPs"
+    else:
+        return celltype
+    
+def create_umaps(adata, adata_name, colnames, date, sep_by=None, sep_by_colnames = None, extra_info=None, point_size=2):
+    '''
+    Input:
+        - adata: assumption is that adata has been run through check_adata_format() and join_adatas() first
+        - adata_name: dataset name/identifier (string)
+        - colnames: list of column names to be colored by
+        - date: date as a string
+        - sep_by: .obs column to separate adatas into and plot separately. Chosen column must be categorical.
+        - sep_by_colnames: columns to be colored by in UMAP
+        - extra_info: additional information to be added into the saved png name
+    '''
+    if sep_by!=None:
+        print('trying to split', sep_by,' for sep by umap')
+        split_categories=list(adata.obs[sep_by].unique())
+        for i in split_categories:
+            cur_adata=adata[adata.obs[sep_by]==i]
+            try: 
+                for col in sep_by_colnames:
+                    if extra_info!=None:
+                        sep_save_str=adata_name+"_"+i+"_"+col+"_"+date+"_"+extra_info+'.png'
+                    else:
+                        sep_save_str=adata_name+"_"+i+"_"+col+"_"+date+'.png'
+                    i_title=i.replace('_', ' ')+': '+col
+                    sc.pl.umap(cur_adata, color=col, size=point_size, title=i_title, save=sep_save_str)
+            except Exception as e:
+                print('could not save umap(s) for', i, "due to...")
+                print(f"{e}")
+
+    for colname in colnames:
+        print('starting umap for...', colname)
+        if extra_info!=None:
+            save_str=adata_name+"_"+colname+"_"+date+"_"+extra_info+'.png'
+        else:
+            save_str=adata_name+"_"+colname+"_"+date+'.png'
+        sc.pl.umap(adata, color=colname, size=point_size, save=save_str)
+        
+    return f"Done saving umaps for {adata_name}"
+
+def apply_celltypist(adata, data_name, celltype_colname, subtype_colname=None, batch=None, date='_'):
+    import celltypist # type: ignore
+    from celltypist import models # type: ignore
+
+    models.download_models(force_update=True, model=['Adult_Human_PrefrontalCortex.pkl'])
+    model = models.Model.load(model = 'Adult_Human_PrefrontalCortex.pkl')
+
+    adata_raw=adata.copy()
+    try:
+        adata_raw.X=adata.layers['counts']
+    except:
+        print(data_name, ' no raw data in .layers["counts"], proceeding with processed data')
+
+    if adata_raw.X.max() > 20:
+        sc.pp.normalize_total(adata_raw, target_sum=10**4)
+        sc.pp.log1p(adata_raw)
+
+    #select highly variable genes if not done previously
+    if 'highly_variable' not in adata_raw.var:
+        if batch != None:
+            sc.pp.highly_variable_genes(adata_raw, n_top_genes=2000, batch_key=batch)
+        else:
+            sc.pp.highly_variable_genes(adata_raw, n_top_genes=2000)
+    #run pca if not done previously
+    if 'X_pca' not in adata_raw.obsm:
+        sc.pp.pca(adata_raw)
+
+    adata_raw.X = adata_raw.X.toarray()
+    predictions = celltypist.annotate(adata_raw, model = 'Adult_Human_PrefrontalCortex.pkl', majority_voting = True)
+    predictions=predictions.to_adata()
+
+    adata_raw.obs['celltypist_majority_voting_celltype']=predictions.obs.loc[adata_raw.obs.index, "majority_voting"]
+    adata.obs['celltypist_majority_voting_celltype']=predictions.obs.loc[adata.obs.index, "majority_voting"] #adding back to adata as well
+    adata_raw=adata_raw[:,adata_raw.var['highly_variable']==True]
+    
+    sc.pp.neighbors(adata_raw, use_rep='X_pca')
+    sc.tl.umap(adata_raw)
+
+    sc.pl.umap(adata_raw, color=["celltypist_majority_voting_celltype"], palette=list(matplotlib.colors.CSS4_COLORS.values()), frameon=False, sort_order=False,
+               wspace=1, title='Celltypist Cell Type',save=data_name+'celltypist_celltype'+date+'.png')
+    
+    sc.pl.umap(adata_raw,color=[celltype_colname],palette=list(matplotlib.colors.CSS4_COLORS.values()),frameon=False,sort_order=False,
+               wspace=1,title=data_name+' Cell Type',save=data_name+'_celltype'+date+'.png')
+    if subtype_colname != None:
+        sc.pl.umap(adata_raw,color=[subtype_colname],palette=list(matplotlib.colors.CSS4_COLORS.values()),frameon=False,sort_order=False,
+               wspace=1,title=data_name+' Subtype',save=data_name+'_subtype'+date+'.png')
+
+
+    return(adata)
+
+def mtx_to_adata(counts_path, gene_names_path, metadata_path, genename_col=None, barcodes_col=None, data_name=None, directory_path=None, raw_counts_path=None, spatial_path=None):
+    '''
+    Input:
+        - counts: full path to matrix of preprocessed counts (or if only raw counts are available then raw counts)
+        - gene_names: full path to csv of gene names to be set as varnames (must be same length and order as matrix)
+        - metadata: full path to csv of obs information (length should correspond to number of cells)
+        - barcodes_col: column name for the barcode/row names in the metadata (if None then no row names will be set)
+        - data_name: string with name of data for file saving
+        - directory_path: path to location for the new file to be stored
+        - raw_counts: path to matrix of raw counts (use if both preprocessed and raw counts are available)
+    '''
+    adata = sc.read_mtx(counts_path)
+    if metadata_path.endswith('.csv') or metadata_path.endswith('.txt'):
+        metadata = pd.read_csv(metadata_path)
+    elif metadata_path.endswith('.tsv'):
+        metadata = pd.read_csv(metadata_path, sep='\t')
+    if gene_names_path.endswith('.csv') or gene_names_path.endswith('.txt'):
+        genes = pd.read_csv(gene_names_path)
+    elif gene_names_path.endswith('.tsv'):
+        genes = pd.read_csv(gene_names_path, sep='\t')
+
+    if len(genes) == adata.shape[1] and len(metadata)==adata.shape[0]:
+        print('processed counts matrix orientation is correct') #no need to transpose
+    elif len(genes) == adata.shape[0] and len(metadata)==adata.shape[1]:
+        print('processed counts matrix is flipped, will need to transpose')
+        adata=adata.T
+    
+    if spatial_path != None:
+        spatial=pd.read_csv(spatial_path)
+        if spatial.shape[0] != adata.shape[0]:
+            print('Warning: The number of rows in spatial data does not match the number of cells in the count matrix.')
+        else:
+            print('Spatial data successfully loaded')
+            # Save spatial coordinates to adata.obsm
+            adata.obsm['spatial'] = spatial.values
+    #checking metadata columns for mixed types
+    for col in metadata.columns:
+        if metadata[col].apply(type).nunique() > 1:
+            print(f"Column '{col}' has mixed types. Converting to string.")
+            metadata[col] = metadata[col].astype(str)
+    adata.obs=metadata
+    if genename_col!=None:
+        adata.var_names=genes[genename_col]
+    else:
+        adata.var_names=genes.iloc[:, 0].values
+    if barcodes_col!=None:
+        adata.obs_names=metadata[barcodes_col]
+
+    if raw_counts_path !=None:
+        raw = sc.read_mtx(raw_counts_path)
+        if len(genes) == raw.shape[1] and len(metadata)==raw.shape[0]:
+            print('raw counts matrix orientation is correct') #no need to transpose
+        elif len(genes) == raw.shape[0] and len(metadata)==raw.shape[1]:
+            print('raw counts matrix is flipped, will need to transpose')
+            raw=raw.T
+        else:
+            print('shape of raw counts matrix and genes/metadata does not match')
+            exit()
+        adata.layers['raw counts'] = raw
+
+    if data_name != None and directory_path!=None:
+        adata.write(directory_path+data_name+'.h5ad')
+    
+    print('Created Adata...', adata)
+    print('Max counts value: ', adata.X.max())
+    return(adata)
+
+def add_gene_names_to_adata(adata):
+    #Dictionary mapping Ensembl IDs to gene names from pybiomart import Server, Dataset
+    server = Server(host='http://www.ensembl.org')
+    dataset = Dataset(name='hsapiens_gene_ensembl', host='http://www.ensembl.org')
+    ensembl_df=dataset.query(attributes=['ensembl_gene_id', 'external_gene_name'])
+    ensembl_df=ensembl_df[ensembl_df['Gene stable ID'].isin(list(adata.var_names)) == True].dropna()
+    df = pd.Series(ensembl_df['Gene name'].values, index=ensembl_df['Gene stable ID'].values).to_dict()
+
+    #Add 'gene_name' to adata
+    gene_names = []
+    valid_ensembl_ids = []
+    for ensembl_id in adata.var_names:
+        if ensembl_id in df:
+            gene_names.append(df[ensembl_id])
+            valid_ensembl_ids.append(ensembl_id)
+            
+    adata.var['gene_name'] = pd.Series(gene_names, index=valid_ensembl_ids)
+    origin_genes_num=adata.shape[1]
+    #Remove the genes that are not in the Ensembl df from the adata
+    adata = adata[:, adata.var_names.isin(valid_ensembl_ids)]
+    print("Number of genes removed due to no mapping gene id: ", origin_genes_num-adata.shape[1])
+    
+    return adata
+
+def subset_adata_by_cell_type(adata, subtype_column='subtype', sample_fraction=0.05):
+    cell_types = adata.obs[subtype_column].unique()
+    sampled_cells = [] #list of indexes to keep
+
+    for cell_type in cell_types:
+        subset = adata[adata.obs[subtype_column] == cell_type]
+        n_cells_to_sample = int(len(subset) * sample_fraction)
+        sampled_subset = subset.obs.index.to_list()  #List of indexes
+        sampled_subset = random.sample(sampled_subset, n_cells_to_sample)       
+        sampled_cells.extend(sampled_subset)
+
+    sampled_adata = adata[adata.obs.index.isin(sampled_cells)]
+    print(f"Subsetted adata shape: {sampled_adata.shape}")
+    return sampled_adata
+
