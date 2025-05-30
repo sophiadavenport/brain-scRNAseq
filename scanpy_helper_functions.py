@@ -1,15 +1,4 @@
 ### Helper Functions for Scanpy Workflows:
-'''
-Contains...
-    - check_adata_format
-    - join_adatas
-    - assign_celltype_class
-    - create_umaps
-    - apply_celltypist
-    - mtx_to_adata
-    - add_gene_names_to_adata
-    - subset_adata_by_cell_type
-'''
 import pandas as pd
 import scanpy as sc
 import numpy as np
@@ -18,13 +7,11 @@ import anndata as an
 import harmonypy # type: ignore
 import matplotlib
 import matplotlib.colors as mcolors
-#import celltypist # type: ignore #moved to celltypist def
-#from celltypist import models # type: ignore #moved to celltypist def 
 import random
 from pybiomart import Server, Dataset # type: ignore
 import sklearn
 
-def check_adata_format(adatas, batches, data_sources, celltype_colnames, subtype_colnames, condition_colnames, save_intermediate_path=None):
+def check_adata_format(adatas, batches, data_sources, celltype_colnames, subtype_colnames, condition_colnames, age_colnames, sex_colnames, save_intermediate_path=None):
     '''
     Input:
         - adatas: list of adata objects
@@ -33,6 +20,8 @@ def check_adata_format(adatas, batches, data_sources, celltype_colnames, subtype
         - celltype_colnames: list of cell type column names in same order as adata objects
         - subtype_colnames: list of cell type column names in same order as adata objects (set as NA if there is no subtype column available)
         - condition_colnames: list of condition/phenotype column names in the same order as adata objects
+        - age_colnames: list of age column names in the same order as adata objects (set with values of NA if not available)
+        - sex_colnames: list of sex column names in the same order as adata objects (set with values of NA if not available)
         - save_intermediate: each passed adata file will be saved to the following path (added later, helpful if joining adatas is running out of memory)
     '''
     return_adatas=[]
@@ -43,24 +32,26 @@ def check_adata_format(adatas, batches, data_sources, celltype_colnames, subtype
         celltype_colname=celltype_colnames[i]
         subtype_colname=subtype_colnames[i]
         condition_colname=condition_colnames[i]
+        age_colname=age_colnames[i]
+        sex_colname=sex_colnames[i]
 
         print(data_source, 'trying to reset counts matrix to raw data...')
         if 'counts' in adata.layers:
-            print(data_source, ' adata.layers["counts"] exists... resetting counts')
+            print(data_source, ' adata.layers["counts"] exists... resetting counts \n')
             adata.X=adata.layers['counts']
         elif hasattr(adata.raw, 'X'):
-            print(data_source, ' adata.raw.X exists... resetting counts')
+            print(data_source, ' adata.raw.X exists... resetting counts \n')
             adata.X=adata.raw.X
         elif adata.X.max()>20:
-            print('counts matrix is already likely unprocessed. Max counts currently: ', adata.X.max())
+            print('counts matrix is already likely unprocessed. Max counts currently: ', adata.X.max(), "\n")
         else:
-            print(data_source, ' no raw data available, continuing with counts as is')
+            print(data_source, ' no raw data available, continuing with counts as is \n')
         
-        adata.var_names_make_unique() #adding to script, determine later if creates issues with joining
+        adata.var_names_make_unique()
 
         ######################################################### Filtering:
-        print('standard preprocess...')
-        print(data_source, 'pre-filtering steps shape: ', adata.shape)
+        print('standard preprocess...\n')
+        print(data_source, 'pre-filtering steps shape: ', adata.shape, "\n")
         adata.var["mt"] = adata.var_names.str.startswith("MT-") #human mitochondrial genes specified
         adata.var["ribo"] = adata.var_names.str.startswith(("RPS", "RPL"))
         adata.var["hb"] = adata.var_names.str.contains("^HB[^(P)]")
@@ -68,7 +59,7 @@ def check_adata_format(adatas, batches, data_sources, celltype_colnames, subtype
         
         sc.pp.filter_cells(adata, min_genes=100)
         sc.pp.filter_genes(adata, min_cells=3)
-        print('number of cells with greater than 10% mitochondrial genes',len(adata[(adata.obs.pct_counts_mt > 10)]))
+        print('number of cells with greater than 10% mitochondrial genes',len(adata[(adata.obs.pct_counts_mt > 10)]), "\n")
         adata = adata[(adata.obs.pct_counts_mt < 10)] #filtering out cells with greater than 10% mitochondrial genes
         
         #Ensuring that batch is category type
@@ -76,20 +67,20 @@ def check_adata_format(adatas, batches, data_sources, celltype_colnames, subtype
             adata.obs[batch] = adata.obs[batch].apply(lambda x: f'Batch{x}' if adata.obs[batch].dtype.name != 'category' else x).astype('category')
         ######################################################### Scrublet to Identify Doublets:
         print('starting scrublet analysis')
-        print('pre-scrublet adata shape: ', adata.shape)
+        print('pre-scrublet adata shape: ', adata.shape, "\n")
         if batch != None:
             try:
                 sc.pp.scrublet(adata, batch_key=batch)
                 predicted_doublet_idx=list(adata[adata.obs.predicted_doublet==True].obs.index)
-                print(len(predicted_doublet_idx), " number of doublets predicted across the dataset ", data_source)
+                print(len(predicted_doublet_idx), " number of doublets predicted across the dataset ", data_source, "\n")
                 if len(predicted_doublet_idx) > 0:
                     adata = adata[~adata.obs.index.isin(predicted_doublet_idx)] #filtering cells in predicted doublet index list out of adata object
-                    print('doublets removed from', data_source, 'new shape: ', adata.shape)
+                    print('doublets removed from', data_source, 'new shape: ', adata.shape, "\n")
                 else:
-                    print('no doublets to remove from', data_source)
+                    print('no doublets to remove from', data_source, "\n")
             except Exception as e:
-                print('scrublet with batch but without batch separation failed for ', data_source)
-                print(f'Error: {str(e)}')
+                print('scrublet with batch but without batch separation failed for ', data_source, "\n")
+                print(f'Error: {str(e)}', "\n")
                 batch_ids = adata.obs[batch].unique()
                 predicted_doublet_idx = []
                 for batch in batch_ids:
@@ -100,25 +91,25 @@ def check_adata_format(adatas, batches, data_sources, celltype_colnames, subtype
                     predicted_doublet_idx.append(list(adata_batch[adata_batch.obs.predicted_doublet == True].obs.index)) #pulling a list of cell where predicted_doublet is true and adding this to the list of predicted doublet cells for the entire batch
     
                 flat_predicted_doublet_idx = [cell_id for batch in predicted_doublet_idx for cell_id in batch]
-                print(len(flat_predicted_doublet_idx), ": number of doublets predicted across the dataset ", data_source)     
+                print(len(flat_predicted_doublet_idx), ": number of doublets predicted across the dataset ", data_source, "\n")     
                 if len(flat_predicted_doublet_idx) > 0:
-                    print('Done with scrublet, starting filter out of doublets')
+                    print('Done with scrublet, starting filter out of doublets \n')
                     adata = adata[~adata.obs.index.isin(flat_predicted_doublet_idx)] #filtering cells in predicted doublet index list out of adata object
-                    print('done filtering of doublets from adata ', data_source)
+                    print('done filtering of doublets from adata ', data_source, "\n")
                 else: #no cells to filter out so continue
-                    print(data_source, ' has no predicted doublets. Adata shape: ', adata.shape)
+                    print(data_source, ' has no predicted doublets. Adata shape: ', adata.shape, "\n")
         else: #batch being None
             sc.pp.scrublet(adata)
             predicted_doublet_idx=list(adata[adata.obs.predicted_doublet==True].obs.index)
-            print(len(predicted_doublet_idx), " number of doublets predicted across the dataset ", data_source) 
+            print(len(predicted_doublet_idx), " number of doublets predicted across the dataset ", data_source, '\n')
             adata = adata[~adata.obs.index.isin(predicted_doublet_idx)] #filtering cells in predicted doublet index list out of adata object
             print('done filtering of doublets from adata ', data_source)
-        print('adata shape after scrublet: ', adata.shape)
+        print('adata shape after scrublet: ', adata.shape, '\n')
         ################################################# Normalizing Data:
         if adata.X.max()<20:
-            print(data_source,' already logged and normalized counts')
+            print(data_source,' already logged and normalized counts \n')
         else:
-            print(adata, 'normalizing and log transforming...')
+            print(adata, 'normalizing and log transforming... \n')
             adata.layers["counts"] = adata.X.copy()
             sc.pp.normalize_total(adata)
             sc.pp.log1p(adata)
@@ -126,7 +117,7 @@ def check_adata_format(adatas, batches, data_sources, celltype_colnames, subtype
         ############################################# Feature Selection:
         try: 
             adata.var['highly_variable']
-            print(i, ' already has highly variable genes')
+            print(i, ' already has highly variable genes \n')
         except:
             if batch!='None':
                     sc.pp.highly_variable_genes(adata, n_top_genes=2000, batch_key=batch)
@@ -148,6 +139,34 @@ def check_adata_format(adatas, batches, data_sources, celltype_colnames, subtype
 
         if condition_colname != 'Condition':
             adata.obs.rename(columns={condition_colname: 'Condition'}, inplace=True)
+        #Checking number of conditions (MS has subtypes of MS in the Condition col)
+        try:
+            if adata.obs['Condition'].nunique() > 3:
+                adata.obs.rename(columns={'Condition': 'Original_Condition'}, inplace=True)
+        
+                adata.obs['Condition'] = adata.obs['Original_Condition'].map(
+                    lambda x: 'Control' if x == 'CTR' else ('MS' if x in ['PPMS', 'RRMS', 'SPMS'] else x)
+                    )
+            else:
+                print('\n Condition column okay with conditions:', list(adata.obs.Condition.unique()), "\n")
+        except Exception as e:
+            print(f"\n Error updating Condition column: {e} \n")
+
+        if age_colname != None:
+            if age_colname != 'Age':
+                adata.obs.rename(columns={age_colname: 'Age'}, inplace=True)
+                adata.obs.Age=adata.obs.Age.round().astype('Int64')
+        else:
+            adata.obs['Age'] = pd.Series([pd.NA] * adata.obs.shape[0], dtype='Int64')
+        
+        standardized_sex_encoding = {'male': 'M', 'Male': 'M', 'MALE': 'M', 'm': 'M', 'M': 'M', 1: 'M',
+                                     'female': 'F', 'Female': 'F', 'FEMALE': 'F', 'f': 'F', 'F': 'F', 0: 'F'}
+        if sex_colname != None:
+            if sex_colname != 'Sex':
+                adata.obs.rename(columns={sex_colname: 'Sex'}, inplace=True)
+                adata.obs.Sex=adata.obs.Sex.map(standardized_sex_encoding).fillna('NA')
+        else:
+            adata.obs['Sex'] = np.full(adata.obs.shape[0], 'NA')
 
         ############################################# PCA + Integration:
         if batch!=None:
@@ -156,17 +175,17 @@ def check_adata_format(adatas, batches, data_sources, celltype_colnames, subtype
                 sc.external.pp.scanorama_integrate(adata, key=batch)
             except Exception as e:
                 error_msg = str(e)
-                print(f"{data_source}: Scanorama error occurred: {error_msg}")
+                print(f"{data_source}: Scanorama error occurred: {error_msg} \n")
                 if "non-contiguous batches" in error_msg.lower():
                     print(f"{data_source}: Attempting to fix non-contiguous batches by sorting...")
                     try:
                         adata = adata[np.argsort(adata.obs[batch].values)].copy()
                         sc.external.pp.scanorama_integrate(adata, key=batch)
-                        print(f"{data_source}: Scanorama successfully rerun with contiguous batches.")
+                        print(f"{data_source}: Scanorama successfully rerun with contiguous batches.\n")
                     except Exception as inner_e:
-                        print(f"{data_source}: Retry failed after sorting: {inner_e}")
+                        print(f"{data_source}: Retry failed after sorting: {inner_e} \n")
         else:
-            print('no scanorama since no batch given')
+            print('No scanorama since no batch given \n')
         #writing to intermediate file if save_intermediate_path:
         if save_intermediate_path!=None:
             cur_save_intermediate_path=save_intermediate_path[i]
@@ -174,44 +193,6 @@ def check_adata_format(adatas, batches, data_sources, celltype_colnames, subtype
         return_adatas.append(adata)
 
     return return_adatas
-
-def join_adatas(adatas, data_sources):
-    '''
-    Input:
-        - adatas: list of adata objects. assumption is that adatas have been run through check_adata_format() first
-        - data_sources: list of data source names in all adatas (order matters)
-    '''
-    for i, adata in enumerate(adatas):
-        data_source=data_sources[i]
-
-        assert 'Celltype' in adata.obs, f"Missing 'Celltype' in {adata}"
-        assert 'Subtype' in adata.obs, f"Missing 'Subtype' in {adata}"
-        assert 'datasource' in adata.obs, f"Missing 'datasource' in {adata}"
-        assert 'Condition' in adata.obs, f"Missing 'Condition' in {adata}"
-        #ensure no duplicated genes:
-        duplicated_genes = adata.var.index[adata.var.index.duplicated()]
-        if len(duplicated_genes) > 0:
-            print('adjusting an adata for duplicated genes...')
-            adata.var_names_make_unique()
-        #ensure no overlapping indexes
-        adata.obs['Barcode'] = adata.obs_names
-        adata.obs_names = [f"{data_source}-" + barcode for barcode in adata.obs_names]
-        
-    ############################################# Joining adata objects:
-    print('joining adatas...')
-    adata_combined = an.concat(adatas, join='inner', keys=data_sources) #only choosing overlapping genes (only same column names in obs will be kept!)
-    print('combined adata shape: ',adata_combined.shape)
-
-    sc.pp.highly_variable_genes(adata_combined, n_top_genes=2000) #rerun highly variable genes with combined data
-    sc.pp.pca(adata_combined) #rerun PCA with combined data before harmony integration
-
-    sc.external.pp.harmony_integrate(adata_combined, key='datasource')
-
-    sc.pp.neighbors(adata_combined, use_rep='X_pca_harmony')
-    sc.tl.umap(adata_combined)
-
-    return adata_combined
-
 
 def assign_celltype_class(celltype):
     '''
