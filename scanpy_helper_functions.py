@@ -161,12 +161,17 @@ def check_adata_format(adatas, batches, data_sources, celltype_colnames, subtype
         
         standardized_sex_encoding = {'male': 'M', 'Male': 'M', 'MALE': 'M', 'm': 'M', 'M': 'M', 1: 'M',
                                      'female': 'F', 'Female': 'F', 'FEMALE': 'F', 'f': 'F', 'F': 'F', 0: 'F'}
+        common_categories = ['M', 'F', 'NA'] 
         if sex_colname != None:
             if sex_colname != 'Sex':
-                adata.obs.rename(columns={sex_colname: 'Sex'}, inplace=True)
-                adata.obs.Sex=adata.obs.Sex.map(standardized_sex_encoding).fillna('NA')
+                mapped_sex = adata.obs[sex_colname].map(standardized_sex_encoding)
+                mapped_sex = mapped_sex.astype("object").fillna('NA')
+                adata.obs['Sex'] = pd.Categorical(mapped_sex, categories=common_categories)
         else:
-            adata.obs['Sex'] = np.full(adata.obs.shape[0], 'NA')
+            adata.obs['Sex'] = pd.Categorical(['NA'] * adata.shape[0], categories=common_categories)
+
+        #asserting categorical for Sex
+        adata.obs['Sex'] = adata.obs['Sex'].astype(pd.CategoricalDtype(categories=common_categories))
 
         ############################################# PCA + Integration:
         if batch!=None:
@@ -196,56 +201,52 @@ def check_adata_format(adatas, batches, data_sources, celltype_colnames, subtype
 
 def assign_celltype_class(celltype):
     '''
+    Intended to be used to assign a dataset's original celltype definition into the AD dataset's broader
+    celltype definitions.
+
     Apply with code such as this: 
-    adata_combined.obs['celltype_broad'] = adata_combined.obs.apply(
-    lambda row: sf.assign_celltype_class(row['Celltype']), axis=1
+    adata.obs['Celltype_Class'] = adata.obs.apply(
+    lambda row: sh.assign_celltype_class(row['Celltype']), axis=1
 )
     '''
-    if isinstance(celltype, str) and (celltype.startswith("Ex-") or celltype.startswith("Exc") or celltype in ['L5', 'L3_L5', 'L2_L3', 'L4_L6', 'L4_L5', 'L5_L6', 'L6'] or celltype.lower().startswith('excitatory neuron') or celltype.lower()=='exc' or celltype.lower() == 'exc' or "CUX2" in celltype or "FEZF2" in celltype or"RORB" in celltype):
+    if isinstance(celltype, str) and (celltype.lower().startswith("exc") or celltype.lower().startswith('ex-')):
         return "Excitatory neurons"
-    elif isinstance(celltype, str) and (celltype.startswith("In-") or celltype.startswith("Inh") or celltype in ['PV', "5HT3aR", "Rosehip", "SOM"] or celltype.lower().startswith('inhibitory neuron') or celltype.lower()=='inh' or "OPRK1" in celltype or "GABRG1" in celltype):
+    elif isinstance(celltype, str) and (celltype.lower().startswith("inh") or celltype.lower().startswith('in-')):
         return "Inhibitory neurons"
-    elif isinstance(celltype, str) and (celltype.lower().startswith("ast")):
+    elif isinstance(celltype, str) and celltype.lower().startswith("ast"):
         return "Astrocytes"
-    elif isinstance(celltype, str) and (celltype=="Mic" or celltype=="Micro" or celltype.lower().startswith("mic") or "LSP1" in celltype or "LYZ" in celltype or celltype.lower()=='cams'):
+    elif isinstance(celltype, str) and (celltype.lower().startswith("mic") or celltype.lower()=='t cells'):
         return "Microglia"
-    elif isinstance(celltype, str) and (celltype=="Endo" or celltype.lower().startswith("end")):
-        return "Endothelial"
-    elif isinstance(celltype, str) and (celltype=="Oli" or celltype.startswith('Oligo') or celltype.endswith("_Oligo") or celltype.lower().startswith("oli") or "PDGFRA" in celltype or "PCDH15" in celltype):
+    elif isinstance(celltype, str) and celltype.lower().startswith("oli"):
         return "Oligodendrocytes"
-    elif isinstance(celltype, str) and (celltype=="Vas" or celltype in ['Mural', 'Fibro'] or celltype=="Perivascular_Fibroblast" or celltype.lower()=='per' or celltype.lower()=="pericytes" or celltype=='Fib' or celltype.upper().startswith("SMC") or celltype.lower().startswith("vasc")):
+    elif isinstance(celltype, str) and (celltype.lower().startswith('vas') or celltype.lower().startswith('endo') or celltype.lower().startswith('peri')):
         return "Vascular Cells"
-    elif isinstance(celltype, str) and (celltype.lower().startswith("t_cell") or celltype.lower().startswith("t cell") or celltype.lower().startswith("b cell") or celltype.lower().startswith("b_cell") or celltype=='T'):
-        return "Immune Cells"
-    elif isinstance(celltype, str) and (celltype.upper().startswith("OPC") or celltype.upper().startswith("OPC_") or "PDGFRA" in celltype):
+    elif isinstance(celltype, str) and celltype.lower().startswith("opc"):
         return "OPCs + COPs"
     else:
         return celltype
     
-def assign_celltype_class_mappedannotations(celltype):
+def assign_celltype_fullnames(celltype):
     '''
+    This function should be used to take the Celltype from AD and create a new column with full names (more friendly to plotting)
     Apply with code such as this: 
-    adata_combined.obs['celltype_broad'] = adata_combined.obs.apply(
-    lambda row: sf.assign_celltype_class(row['Celltype']), axis=1
-)
+    adata.obs['Celltype_Class'] = adata.obs.apply(
+    lambda row: sh.assign_celltype_fullnames(row['Celltype']), axis=1
+    )
     '''
-    if isinstance(celltype, str) and celltype.startswith("Exc"):
+    if isinstance(celltype, str) and celltype.lower().startswith("exc"):
         return "Excitatory neurons"
-    elif isinstance(celltype, str) and celltype.startswith("Inh"):
+    elif isinstance(celltype, str) and celltype.lower().startswith("inh"):
         return "Inhibitory neurons"
     elif isinstance(celltype, str) and celltype.lower().startswith("ast"):
         return "Astrocytes"
-    elif isinstance(celltype, str) and (celltype.lower().startswith("mic") or celltype.lower()=='cams' or celltype.lower()=='epd'): #setting EPD to microglia since ependymal cells are specialized glial cells
+    elif isinstance(celltype, str) and celltype.lower().startswith("mic"):
         return "Microglia"
-    elif isinstance(celltype, str) and celltype.lower().startswith("end"):
-        return "Endothelial"
     elif isinstance(celltype, str) and celltype.lower().startswith("oli"):
         return "Oligodendrocytes"
-    elif isinstance(celltype, str) and (celltype.lower()=='per' or celltype.lower()=='fib' or celltype.upper().startswith("SMC") or celltype.upper()=='CPEC'):
+    elif isinstance(celltype, str) and celltype.lower().startswith('vas'):
         return "Vascular Cells"
-    elif isinstance(celltype, str) and celltype.upper()=='T':
-        return "Immune Cells"
-    elif isinstance(celltype, str) and celltype.upper().startswith("OPC"):
+    elif isinstance(celltype, str) and celltype.lower().startswith("opc"):
         return "OPCs + COPs"
     else:
         return celltype
@@ -287,56 +288,6 @@ def create_umaps(adata, adata_name, colnames, date, sep_by=None, sep_by_colnames
         sc.pl.umap(adata, color=colname, size=point_size, save=save_str)
         
     return f"Done saving umaps for {adata_name}"
-
-def apply_celltypist(adata, data_name, celltype_colname, subtype_colname=None, batch=None, date='_'):
-    import celltypist # type: ignore
-    from celltypist import models # type: ignore
-
-    models.download_models(force_update=True, model=['Adult_Human_PrefrontalCortex.pkl'])
-    model = models.Model.load(model = 'Adult_Human_PrefrontalCortex.pkl')
-
-    adata_raw=adata.copy()
-    try:
-        adata_raw.X=adata.layers['counts']
-    except:
-        print(data_name, ' no raw data in .layers["counts"], proceeding with processed data')
-
-    if adata_raw.X.max() > 20:
-        sc.pp.normalize_total(adata_raw, target_sum=10**4)
-        sc.pp.log1p(adata_raw)
-
-    #select highly variable genes if not done previously
-    if 'highly_variable' not in adata_raw.var:
-        if batch != None:
-            sc.pp.highly_variable_genes(adata_raw, n_top_genes=2000, batch_key=batch)
-        else:
-            sc.pp.highly_variable_genes(adata_raw, n_top_genes=2000)
-    #run pca if not done previously
-    if 'X_pca' not in adata_raw.obsm:
-        sc.pp.pca(adata_raw)
-
-    adata_raw.X = adata_raw.X.toarray()
-    predictions = celltypist.annotate(adata_raw, model = 'Adult_Human_PrefrontalCortex.pkl', majority_voting = True)
-    predictions=predictions.to_adata()
-
-    adata_raw.obs['celltypist_majority_voting_celltype']=predictions.obs.loc[adata_raw.obs.index, "majority_voting"]
-    adata.obs['celltypist_majority_voting_celltype']=predictions.obs.loc[adata.obs.index, "majority_voting"] #adding back to adata as well
-    adata_raw=adata_raw[:,adata_raw.var['highly_variable']==True]
-    
-    sc.pp.neighbors(adata_raw, use_rep='X_pca')
-    sc.tl.umap(adata_raw)
-
-    sc.pl.umap(adata_raw, color=["celltypist_majority_voting_celltype"], palette=list(matplotlib.colors.CSS4_COLORS.values()), frameon=False, sort_order=False,
-               wspace=1, title='Celltypist Cell Type',save=data_name+'celltypist_celltype'+date+'.png')
-    
-    sc.pl.umap(adata_raw,color=[celltype_colname],palette=list(matplotlib.colors.CSS4_COLORS.values()),frameon=False,sort_order=False,
-               wspace=1,title=data_name+' Cell Type',save=data_name+'_celltype'+date+'.png')
-    if subtype_colname != None:
-        sc.pl.umap(adata_raw,color=[subtype_colname],palette=list(matplotlib.colors.CSS4_COLORS.values()),frameon=False,sort_order=False,
-               wspace=1,title=data_name+' Subtype',save=data_name+'_subtype'+date+'.png')
-
-
-    return(adata)
 
 def mtx_to_adata(counts_path, gene_names_path, metadata_path, genename_col=None, barcodes_col=None, data_name=None, directory_path=None, raw_counts_path=None, spatial_path=None):
     '''
@@ -428,19 +379,3 @@ def add_gene_names_to_adata(adata):
     print("Number of genes removed due to no mapping gene id: ", origin_genes_num-adata.shape[1])
     
     return adata
-
-def subset_adata_by_cell_type(adata, subtype_column='subtype', sample_fraction=0.05):
-    cell_types = adata.obs[subtype_column].unique()
-    sampled_cells = [] #list of indexes to keep
-
-    for cell_type in cell_types:
-        subset = adata[adata.obs[subtype_column] == cell_type]
-        n_cells_to_sample = int(len(subset) * sample_fraction)
-        sampled_subset = subset.obs.index.to_list()  #List of indexes
-        sampled_subset = random.sample(sampled_subset, n_cells_to_sample)       
-        sampled_cells.extend(sampled_subset)
-
-    sampled_adata = adata[adata.obs.index.isin(sampled_cells)]
-    print(f"Subsetted adata shape: {sampled_adata.shape}")
-    return sampled_adata
-
