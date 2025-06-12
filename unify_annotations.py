@@ -47,7 +47,7 @@ for adata_name in datasets:
     adata_path=datasets[adata_name][0]
     outfile_path=datasets[adata_name][1]
     adata=sc.read_h5ad(adata_path)
-    if adata_mapping.X.max() < 100: #then log normalized
+    if adata.X.max() < 100: #then log normalized
         adata.layers['normalized_counts']=adata.X #saving normalized counts before resetting
         adata.X=adata.layers['counts'] #resetting to raw counts since TACCO requires it
 
