@@ -15,7 +15,7 @@ MS_METADATA=config["MS_metadata"]
 
 rule all:
     input:
-        "intermediate/MS_postqc.h5ad", "results/common_gene_list.csv", "intermediate/AD_postqc.h5ad", "intermediate/BD_SZ_postqc.h5ad", "results/common_gene_list.csv", "results/annotations_qc_report.txt", f"{OUTPUT_PATH}/ADBDMSSZ_full.h5ad", "results/ADBDMSSZ_full_unified_celltype_umap.png"
+        "results/ADBDMSSZ_full_unified_celltype_umap.png", "results/common_gene_list.csv", "results/annotations_qc_report.txt",
 
 rule filter_BD_SZ: #BD and SZ data must be filtered first since they have overlapping cells
     input:
@@ -45,24 +45,48 @@ rule tacco_annotations: #creating column unified_celltype and unified_celltype_b
     input:
         MS=f"intermediate/MS_postqc.h5ad", AD=f"intermediate/AD_postqc.h5ad", BD_SZ=f"intermediate/BD_SZ_postqc.h5ad"
     output:
-        MS_outfile=f"{OUTPUT_PATH}/MS_formatted.h5ad", AD_outfile=f"{OUTPUT_PATH}/AD_formatted.h5ad", BD_SZ_outfile=f"{OUTPUT_PATH}/BD_SZ_formatted.h5ad", annotations_report="results/annotations_qc_report.txt"
+        MS_outfile=f"{OUTPUT_PATH}/MS_formatted.h5ad", AD_outfile=f"{OUTPUT_PATH}/AD_formatted.h5ad", BD_outfile=f"{OUTPUT_PATH}/BD_formatted.h5ad", SZ_outfile=f"{OUTPUT_PATH}/SZ_formatted.h5ad", annotations_report="results/annotations_qc_report.txt"
     params:
         mapping_annotation_key='Subtype'
     conda:
         'envs/TACCO_env.yaml'
     shell:
         """
-        python unify_annotations.py --AD {input.AD} --BD_SZ {input.BD_SZ} --MS {input.MS} --mapping_annotation_key {params.mapping_annotation_key} --MS_outfile {output.MS_outfile} --AD_outfile {output.AD_outfile} --BD_SZ_outfile {output.BD_SZ_outfile} --report {output.annotations_report}
+        python unify_annotations.py --AD {input.AD} --BD_SZ {input.BD_SZ} --MS {input.MS} --mapping_annotation_key {params.mapping_annotation_key} --MS_outfile {output.MS_outfile} --AD_outfile {output.AD_outfile} --BD_outfile {output.BD_outfile} --SZ_outfile {output.SZ_outfile} --report {output.annotations_report}
         """
 
 rule join_adatas:
     input:
-        MS=f"{OUTPUT_PATH}/MS_formatted.h5ad", AD=f"{OUTPUT_PATH}/AD_formatted.h5ad", BD_SZ=f"{OUTPUT_PATH}/BD_SZ_formatted.h5ad"
+         MS=f"{OUTPUT_PATH}/MS_formatted.h5ad", AD=f"{OUTPUT_PATH}/AD_formatted.h5ad", BD=f"{OUTPUT_PATH}/BD_formatted.h5ad", SZ=f"{OUTPUT_PATH}/SZ_formatted.h5ad"
     output:
-        joined_adata=f"{OUTPUT_PATH}/ADBDMSSZ_full.h5ad", umap="results/ADBDMSSZ_full_unified_celltype_umap.png"
+         joined_adata=temp(f"{OUTPUT_PATH}/ADBDMSSZ_full.h5ad")
+    conda:
+         "envs/scanpy.yaml"
+    shell:
+         """
+         python join_adatas.py --MS {input.MS} --AD {input.AD} --BD {input.BD} --SZ {input.SZ} --joined_outfile {output.joined_adata}
+         """
+
+rule redo_clustering:
+    input:
+        joined_adata=f"{OUTPUT_PATH}/ADBDMSSZ_full.h5ad"
+    output:
+        joined_outfile=f"{OUTPUT_PATH}/ADBDMSSZ_full_processed.h5ad"
     conda:
         "envs/scanpy.yaml"
     shell:
         """
-        python --MS {input.MS} --AD {input.AD} --BD_SZ {input.BD_SZ} --joined_outfile {output.joined_adata} --umap_path {output.umap}
+        python data_cluster.py --joined_adata {input.joined_adata} --joined_outfile {output.joined_outfile}
+        """
+
+rule umaps:
+    input:
+        joined_adata=f"{OUTPUT_PATH}/ADBDMSSZ_full_processed.h5ad"
+    output:
+        celltype_umap_tracked="results/ADBDMSSZ_full_unified_celltype_umap.png"
+    conda:
+        "envs/scanpy.yaml"
+    shell:
+        """
+        python umaps.py --joined_adata {input.joined_adata} --celltype_umap_tracked {output.celltype_umap_tracked}
         """

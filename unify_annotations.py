@@ -8,6 +8,7 @@ import tacco as tc # type: ignore
 import scanpy_helper_functions as sh
 import sklearn
 import argparse
+import gc
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--AD", required=True)
@@ -15,7 +16,8 @@ parser.add_argument("--BD_SZ", required=True)
 parser.add_argument("--MS", required=True)
 parser.add_argument("--mapping_annotation_key", required=True)
 parser.add_argument("--AD_outfile", required=True)
-parser.add_argument("--BD_SZ_outfile", required=True)
+parser.add_argument("--BD_outfile", required=True)
+parser.add_argument("--SZ_outfile", required=True)
 parser.add_argument("--MS_outfile", required=True)
 parser.add_argument("--report", required=True, help="Relative path to report to be saved as txt.")
 args = parser.parse_args()
@@ -36,17 +38,22 @@ else:
 subtype_fullname_key=adata_mapping.obs[['Celltype_Class', 'Subtype']].drop_duplicates()
 subtype_to_class = dict(subtype_fullname_key[['Subtype', 'Celltype_Class']].values)
 
-datasets = {'BD_SZ': [args.BD_SZ, args.BD_SZ_outfile], 'MS': [args.MS, args.MS_outfile]}
+#splitting BD and SZ since the size requires MKL ILP64 which has environment conflicts
+BDSZ=sc.read_h5ad(args.BD_SZ)
+BD=BDSZ[BDSZ.obs.datasource == "Han"]
+SZ=BDSZ[BDSZ.obs.datasource == "Ruzicka"]
+del BDSZ
+gc.collect()
 
-with open(args.report, "w") as f:
-    f.write("TACCO Annotation Report\n")
-    f.write("=======================\n\n")
-
-for adata_name in datasets:
+#for adata_name in datasets:
+def tacco_ref(adata_name,outfile_path, adata=None, adata_path=None):
+    if adata is None:
+        if adata_path is None:
+            raise ValueError("Either 'adata' or 'adata_path' must be provided.")
+        adata=sc.read_h5ad(adata_path)
     print('starting tacco for', adata_name)
-    adata_path=datasets[adata_name][0]
-    outfile_path=datasets[adata_name][1]
-    adata=sc.read_h5ad(adata_path)
+    #adata_path=datasets[adata_name][0]
+    #outfile_path=datasets[adata_name][1]
     if adata.X.max() < 100: #then log normalized
         adata.layers['normalized_counts']=adata.X #saving normalized counts before resetting
         adata.X=adata.layers['counts'] #resetting to raw counts since TACCO requires it
@@ -98,13 +105,28 @@ for adata_name in datasets:
     ###################### Writing adata with new celltype columns:
     adata.write(outfile_path)
 
-    ##################### Creating the Report:
-    with open(args.report, "a") as f:
-        f.write(f"{adata_name}\n")
-        f.write(f"Results from using tacco to unify celltype annotations\n")
-        f.write(f"ARI score for adata with mapped annotations: {ARI_score}\n")
-        f.write(f"NMI score for adata with mapped annotations: {NMI_score}\n")
-        f.write(f"For cluster uniformity scores, cells not included in ARI or NMI score due to NA celltype in original dataset: {cells_not_uniform}\n")
+    return(adata_name, ARI_score, NMI_score, cells_not_uniform)
+
+MS_tacco_ref=tacco_ref(adata_name='MS',outfile_path=args.MS_outfile, adata=None, adata_path=args.MS)
+BD_tacco_ref=tacco_ref(adata_name='BD',outfile_path=args.BD_outfile, adata=BD, adata_path=None)
+del BD
+gc.collect()
+SZ_tacco_ref=tacco_ref(adata_name='SZ',outfile_path=args.SZ_outfile, adata=SZ, adata_path=None)
+del SZ
+gc.collect()
+tacco_ref_list=[MS_tacco_ref, BD_tacco_ref, SZ_tacco_ref]
+##################### Creating the Report:
+with open(args.report, "w") as f:
+    f.write("TACCO Annotation Report\n")
+    f.write("=======================\n\n")
+
+with open(args.report, "a") as f:
+    for name, ari, nmi, n_na in tacco_ref_list:
+        f.write(f"{name}\n")
+        f.write("Results from using tacco to unify celltype annotations\n")
+        f.write(f"ARI score for adata with mapped annotations: {ari:.4f}\n")
+        f.write(f"NMI score for adata with mapped annotations: {nmi:.4f}\n")
+        f.write(f"Cells excluded from metrics due to NA celltype in original dataset: {n_na}\n\n")
 
 adata_mapping.obs['unified_subtype'] = adata_mapping.obs['Subtype'] #adding unified_celltype to AD as well so that when joining later on this column is not lost in others
 adata_mapping.write(args.AD_outfile)
