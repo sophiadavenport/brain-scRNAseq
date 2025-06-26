@@ -35,6 +35,18 @@ if (is.null(counts) || nrow(counts) == 0 || ncol(counts) == 0 ) {
 metadata <- read.csv(metadata_file, row.names = 1)
 metadata[[condition_col]] <- gsub(" ", ".", metadata[[condition_col]]) #ensure no spaces in conditions
 
+#Checking number of individuals contributing to each group
+indiv_groups_check <- function(metadata, group_col = condition_col, min_n = 3) {
+  counts_per_group <- table(metadata[[group_col]])
+  all(counts_per_group >= min_n)
+}
+if (indiv_groups_check(metadata)) {
+  #Proceed with DEG
+} else {
+  message("Skipping DEG: insufficient individuals per group")
+  write_empty_output(output_file)
+}
+
 sample <- factor(metadata[["replicate"]]) #avoid pseudoreplication
 group <- as.factor(metadata[[condition_col]])
 
