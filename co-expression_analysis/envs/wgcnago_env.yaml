@@ -1,0 +1,13 @@
+name: wcgnago_env
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - r-base=4.2
+  - r-wgcna
+  - r-dynamictreecut
+  - bioconductor-clusterprofiler
+  - bioconductor-org.hs.eg.db
+  - r-tidyverse
+  - r-optparse

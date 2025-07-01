@@ -1,0 +1,13 @@
+name: cscore_env
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - scanpy
+  - anndata
+  - pandas
+  - numpy
+  - pip
+  - pip:
+      - -e /lab/solexa_sun/lab_members/sdavenport/scRNAseq/brain/co-expression_analysis/CS-CORE_python
