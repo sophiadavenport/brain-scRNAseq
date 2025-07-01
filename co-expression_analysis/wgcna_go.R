@@ -7,9 +7,9 @@ args <- commandArgs(trailingOnly = TRUE)
 coexpr_path <- args[1]
 pval_path <- args[2]
 genes_path <- args[3]
-celltype_dir <- args[4]
+output_dir <- args[4]
 
-if (!dir.exists(celltype_dir)) dir.create(celltype_dir, recursive = TRUE)
+if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
 
 coexpr <- as.matrix(read.csv(coexpr_path, header = FALSE))
 pvals  <- as.matrix(read.csv(pval_path,  header = FALSE))
