@@ -40,7 +40,6 @@ names(memb) <- genes_selected
 
 module_df <- data.frame(gene = genes_selected, module = memb)
 write.csv(module_df, file.path(output_dir, "modules.csv"), row.names = FALSE)
-#write.csv(module_df, sub("_coexpr.csv", "_modules.csv", coexpr_path), row.names = FALSE)
 
 module_list <- lapply(sort(unique(memb[memb > 0])), function(k) names(which(memb == k)))
 
@@ -60,8 +59,6 @@ for (i in seq_along(module_list)) {
   }, error = function(e) NULL)
 
   if (!is.null(eg) && nrow(eg@result) > 0) {
-    #out_file <- sub("_coexpr.csv", paste0("_module", i, "_GO.csv"), coexpr_path)
-    #write.csv(eg@result, out_file, row.names = FALSE)
     out_file <- file.path(output_dir, paste0("module", i, "_GO.csv"))
     write.csv(eg@result, out_file, row.names = FALSE)
   }
