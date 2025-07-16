@@ -1,20 +1,19 @@
 use_conda=True
 
-datasets={"SZ_celltypeclass": config["sz_adata_path"], "AD_celltypeclass": config["ad_adata_path"]}
-#celltypes = ['Oligodendrocytes', 'Excitatory_neurons', 'Inhibitory_neurons', 'Astrocytes', 'Microglia', 'OPCs_COPs', 'Vascular_Cells'] #list of all unique celltypes from all input datasets
-celltypes = ['Microglia']
+datasets={"SZ_celltypeclass": config["sz_adata_path"], "BD_celltypeclass": config["bd_adata_path"], "MS_celltypeclass": config["ms_adata_path"], "AD_celltypeclass": config["ad_adata_path"]}
+celltypes = ['Oligodendrocytes', 'Microglia', 'Excitatory_neurons', 'OPCs_COPs', 'Astrocytes', 'Vascular_Cells', 'Inhibitory_neurons'] #list of all unique celltypes from all input datasets
 
 rule all:
     input:
-        expand("results/{dataset}__{celltype}/disease_modules/gene_network.png", dataset=datasets.keys(), celltype=celltypes), expand("results/{dataset}__{celltype}/ctrl_modules/gene_network.png", dataset=datasets.keys(), celltype=celltypes)
+        expand("results/{dataset}__{celltype}_coexpr.csv", dataset=datasets.keys(), celltype=celltypes), expand("results/{dataset}__{celltype}/modules/modules.csv", dataset=datasets.keys(), celltype=celltypes), expand("results/{dataset}__{celltype}/{dataset}__{celltype}_individualmatrix.csv", dataset=datasets.keys(), celltype=celltypes)
+        #expand("results/{dataset}__{celltype}/modules/gene_network.png", dataset=datasets.keys(), celltype=celltypes)
 
 rule cscore:
     input:
         adata=lambda wildcards: datasets[wildcards.dataset]
     output:
-        ctrl_coexpr="results/{dataset}__{celltype}_ctrl_coexpr.csv",ctrl_pvals="results/{dataset}__{celltype}_ctrl_pvals.csv",ctrl_teststats="results/{dataset}__{celltype}_ctrl_teststats.csv",ctrl_genes="results/{dataset}__{celltype}_ctrl_genes.csv",
-        disease_coexpr="results/{dataset}__{celltype}_disease_coexpr.csv",disease_pvals="results/{dataset}__{celltype}_disease_pvals.csv", disease_teststats="results/{dataset}__{celltype}_disease_teststats.csv",disease_genes="results/{dataset}__{celltype}_disease_genes.csv"
-    threads: 4
+        coexpr="results/{dataset}__{celltype}_coexpr.csv",pvals="results/{dataset}__{celltype}_pvals.csv",teststats="results/{dataset}__{celltype}_teststats.csv",genes="results/{dataset}__{celltype}_genes.csv"
+    threads: 2
     params:
         celltype_col="Celltype_Class"
     conda:
@@ -24,52 +23,42 @@ rule cscore:
         python cscore.py --adata {input.adata} --celltype_col {params.celltype_col} --current_celltype {wildcards.celltype} --output_prefix results/{wildcards.dataset}__{wildcards.celltype}
         """
 
-rule wgcna_go_ctrl:
+rule wgcna_go:
     input:
-        coexpr="results/{dataset}__{celltype}_ctrl_coexpr.csv",pvals="results/{dataset}__{celltype}_ctrl_pvals.csv",genes="results/{dataset}__{celltype}_ctrl_genes.csv"
+        coexpr="results/{dataset}__{celltype}_coexpr.csv",pvals="results/{dataset}__{celltype}_pvals.csv",genes="results/{dataset}__{celltype}_genes.csv"
     output:
-        modules="results/{dataset}__{celltype}/ctrl_modules/modules.csv"
+        modules="results/{dataset}__{celltype}/modules/modules.csv"
     conda:
         "envs/wgcnago_env.yaml"
     shell:
         """
-        Rscript wgcna_go.R {input.coexpr} {input.pvals} {input.genes} results/{wildcards.dataset}__{wildcards.celltype}/ctrl_modules
+        Rscript wgcna_go.R {input.coexpr} {input.pvals} {input.genes} results/{wildcards.dataset}__{wildcards.celltype}/modules
         """
 
-rule wgcna_go_disease:
+rule individual_matrix_exp:
     input:
-        coexpr="results/{dataset}__{celltype}_disease_coexpr.csv",pvals="results/{dataset}__{celltype}_disease_pvals.csv",genes="results/{dataset}__{celltype}_disease_genes.csv"
+        adata=lambda wildcards: datasets[wildcards.dataset], modules="results/{dataset}__{celltype}/modules/modules.csv"
     output:
-        modules="results/{dataset}__{celltype}/disease_modules/modules.csv"
+        matrix="results/{dataset}__{celltype}/{dataset}__{celltype}_individualmatrix.csv"
+    threads: 4
+    params:
+        celltype_col="Celltype_Class"
     conda:
-        "envs/wgcnago_env.yaml"
+        "envs/cscore_env.yaml"
     shell:
         """
-        Rscript wgcna_go.R {input.coexpr} {input.pvals} {input.genes} results/{wildcards.dataset}__{wildcards.celltype}/disease_modules
-        """
-    
-rule plot_network_ctrl:
-    input:
-        coexpr="results/{dataset}__{celltype}_ctrl_coexpr.csv",
-        modules="results/{dataset}__{celltype}/ctrl_modules/modules.csv"
-    output:
-        plot="results/{dataset}__{celltype}/ctrl_modules/gene_network.png"
-    conda:
-        "envs/plot_network_env.yaml"
-    shell:
-        """
-        Rscript plot_gene_network.R {input.coexpr} {input.modules} {output.plot}
+        python indv_module_matrix.py --adata {input.adata} --modules {input.modules} --matrix {output.matrix} --current_celltype {wildcards.celltype} --celltype_col {params.celltype_col}
         """
 
-rule plot_network_disease:
-    input:
-        coexpr="results/{dataset}__{celltype}_disease_coexpr.csv",
-        modules="results/{dataset}__{celltype}/disease_modules/modules.csv"
-    output:
-        plot="results/{dataset}__{celltype}/disease_modules/gene_network.png"
-    conda:
-        "envs/plot_network_env.yaml"
-    shell:
-        """
-        Rscript plot_gene_network.R {input.coexpr} {input.modules} {output.plot}
-        """
+
+#rule plot_network:
+##    input:
+#        coexpr="results/{dataset}__{celltype}_coexpr.csv", modules="results/{dataset}__{celltype}/modules/modules.csv"
+#    output:
+#        plot="results/{dataset}__{celltype}/modules/gene_network.png"
+ #   conda:
+#        "envs/plot_network_env.yaml"
+#    shell:
+#        """
+#        Rscript plot_gene_network.R {input.coexpr} {input.modules} {output.plot}
+#        """
