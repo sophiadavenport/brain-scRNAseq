@@ -13,6 +13,8 @@ parser.add_argument("--MS_genenames", required=True)
 parser.add_argument("--MS_outfile", required=True)
 parser.add_argument("--AD_h5ad", required=True)
 parser.add_argument("--AD_metadata", required=True)
+parser.add_argument("--ASD_h5ad", required=True)
+parser.add_argument("--ASD_outfile", required=True)
 parser.add_argument("--AD_outfile", required=True)
 parser.add_argument("--BD_SZ", required=True)
 parser.add_argument("--BD_SZ_outfile", required=True)
@@ -54,7 +56,6 @@ AD_MS=sh.check_adata_format(adatas=[MS, AD], batches=['sample_source', 'batch'],
                                       sex_colnames=['sex', 'msex_x'])
 
 MS_form=AD_MS[0]
-#MS_form.write(args.MS_output)
 AD_form=AD_MS[1]
 
 #reducing memory by removing unneccesary objects downstream
@@ -65,8 +66,22 @@ gc.collect()
 
 BD_SZ=sc.read_h5ad(args.BD_SZ)
 
+#ASD added...
+ASD=sc.read_h5ad(args.ASD_h5ad)
+ASD=sh.check_adata_format(adatas=[ASD], batches=['libraryBatch'],
+                                      data_sources=['Wamsley'],
+                                      celltype_colnames=['anno'], 
+                                      subtype_colnames=[None], 
+                                      condition_colnames=['Diagnosis'],
+                                      age_colnames=['Age'],
+                                      sex_colnames=['SexChromosome'])
+
+ASD_form=ASD[0]
+del ASD
+gc.collect()
+
 #removing genes not included in all adatas
-common_genes = set(BD_SZ.var_names) & set(AD_form.var_names) & set(MS_form.var_names)
+common_genes = set(BD_SZ.var_names) & set(AD_form.var_names) & set(MS_form.var_names) & set(ASD_form.var_names)
 common_genes_df = pd.DataFrame(sorted(common_genes), columns=["gene"])
 common_genes_df.to_csv(args.keep_genes_file, index=False)
 print('Common Genes:',len(common_genes),'\n')
@@ -83,3 +98,10 @@ gc.collect()
 BD_SZ = BD_SZ[:, BD_SZ.var_names.isin(common_genes)].copy()
 BD_SZ.write(args.BD_SZ_outfile)
 print('Formatted BD_SZ Shape:', BD_SZ.shape)
+del BD_SZ
+gc.collect()
+ASD_form = ASD_form[:, ASD_form.var_names.isin(common_genes)].copy()
+ASD_form.write(args.ASD_outfile)
+print('Formatted ASD Shape:', ASD_form.shape)
+del ASD_form
+gc.collect()

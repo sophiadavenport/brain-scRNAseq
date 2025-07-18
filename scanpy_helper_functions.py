@@ -160,7 +160,7 @@ def check_adata_format(adatas, batches, data_sources, celltype_colnames, subtype
             adata.obs['Age'] = pd.Series([pd.NA] * adata.obs.shape[0], dtype='Int64')
         
         standardized_sex_encoding = {'male': 'M', 'Male': 'M', 'MALE': 'M', 'm': 'M', 'M': 'M', 1: 'M',
-                                     'female': 'F', 'Female': 'F', 'FEMALE': 'F', 'f': 'F', 'F': 'F', 0: 'F'}
+                                     'female': 'F', 'Female': 'F', 'FEMALE': 'F', 'f': 'F', 'F': 'F', 0: 'F', 'XX': 'F', 'XY': 'M', 'XYY': 'M'}
         common_categories = ['M', 'F', 'NA'] 
         if sex_colname != None:
             if sex_colname != 'Sex':
@@ -209,15 +209,15 @@ def assign_celltype_class(celltype):
     lambda row: sh.assign_celltype_class(row['Celltype']), axis=1
 )
     '''
-    if isinstance(celltype, str) and (celltype.lower().startswith("exc") or celltype.lower().startswith('ex-')):
+    if isinstance(celltype, str) and (celltype.lower().startswith("exc") or celltype.lower().startswith('ex-') or celltype.lower().startswith('exn')):
         return "Excitatory neurons"
-    elif isinstance(celltype, str) and (celltype.lower().startswith("inh") or celltype.lower().startswith('in-')):
+    elif isinstance(celltype, str) and (celltype.lower().startswith("inh") or celltype.lower().startswith('in-') or celltype.lower().startswith('inn')):
         return "Inhibitory neurons"
     elif isinstance(celltype, str) and celltype.lower().startswith("ast"):
         return "Astrocytes"
-    elif isinstance(celltype, str) and (celltype.lower().startswith("mic") or celltype.lower()=='t cells'):
+    elif isinstance(celltype, str) and (celltype.lower().startswith("mic") or celltype.lower().startswith("mg") or celltype.lower()=='t cells'):
         return "Microglia"
-    elif isinstance(celltype, str) and celltype.lower().startswith("oli"):
+    elif isinstance(celltype, str) and (celltype.lower().startswith("oli") or celltype.lower().startswith("odc")):
         return "Oligodendrocytes"
     elif isinstance(celltype, str) and (celltype.lower().startswith('vas') or celltype.lower().startswith('endo') or celltype.lower().startswith('peri')):
         return "Vascular Cells"

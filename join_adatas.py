@@ -10,6 +10,7 @@ parser.add_argument("--AD", required=True)
 parser.add_argument("--MS", required=True)
 parser.add_argument("--BD", required=True)
 parser.add_argument("--SZ", required=True)
+parser.add_argument("--ASD", required=True)
 parser.add_argument("--joined_outfile", required=True)
 args = parser.parse_args()
 
@@ -48,7 +49,7 @@ assert_correct_cols_checkobsnames(adata=BD, name='BD', author='Han')
 
 adatas_list=[adata_combined, BD]
 print('Trying join 2...\n')
-adata_combined = an.concat(adatas_list, join='inner', keys=None) #trying with no key for second join ()
+adata_combined = an.concat(adatas_list, join='inner', keys=None)
 print('Join 2 successful:', adata_combined.shape, '\n')
 print('Adata combined:', adata_combined, '\n')
 
@@ -64,11 +65,22 @@ assert_correct_cols_checkobsnames(adata=SZ, name='SZ', author='Ruzicka')
 
 adatas_list=[adata_combined, SZ]
 print('Trying join 3...\n')
-adata_combined = an.concat(adatas_list, join='inner', keys=None) #trying with no key for second join ()
+adata_combined = an.concat(adatas_list, join='inner', keys=None)
 print('Join 3 successful:', adata_combined.shape, '\n')
 print('Adata combined:', adata_combined, '\n')
 
 del SZ
+gc.collect()
+
+ASD=sc.read_h5ad(args.ASD)
+assert_correct_cols_checkobsnames(adata=ASD, name='ASD', author='Wamsley')
+adatas_list=[adata_combined, ASD]
+print('Trying join 4...\n')
+adata_combined = an.concat(adatas_list, join='inner', keys=None)
+print('Join 4 successful:', adata_combined.shape, '\n')
+print('Adata combined:', adata_combined, '\n')
+
+del ASD
 gc.collect()
 
 adata_combined.write(args.joined_outfile)

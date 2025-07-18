@@ -14,11 +14,13 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--AD", required=True)
 parser.add_argument("--BD_SZ", required=True)
 parser.add_argument("--MS", required=True)
+parser.add_argument("--ASD", required=True)
 parser.add_argument("--mapping_annotation_key", required=True)
 parser.add_argument("--AD_outfile", required=True)
 parser.add_argument("--BD_outfile", required=True)
 parser.add_argument("--SZ_outfile", required=True)
 parser.add_argument("--MS_outfile", required=True)
+parser.add_argument("--ASD_outfile", required=True)
 parser.add_argument("--report", required=True, help="Relative path to report to be saved as txt.")
 args = parser.parse_args()
 
@@ -114,7 +116,8 @@ gc.collect()
 SZ_tacco_ref=tacco_ref(adata_name='SZ',outfile_path=args.SZ_outfile, adata=SZ, adata_path=None)
 del SZ
 gc.collect()
-tacco_ref_list=[MS_tacco_ref, BD_tacco_ref, SZ_tacco_ref]
+ASD_tacco_ref=tacco_ref(adata_name='ASD',outfile_path=args.ASD_outfile, adata=None, adata_path=args.ASD)
+tacco_ref_list=[MS_tacco_ref, BD_tacco_ref, SZ_tacco_ref, ASD_tacco_ref]
 ##################### Creating the Report:
 with open(args.report, "w") as f:
     f.write("TACCO Annotation Report\n")
