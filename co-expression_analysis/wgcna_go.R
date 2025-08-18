@@ -14,8 +14,6 @@ if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
 coexpr <- as.matrix(read.csv(coexpr_path, header = FALSE))
 pvals  <- as.matrix(read.csv(pval_path,  header = FALSE))
 genes_selected <- readLines(genes_path)
-
-#Assign gene names to matrices
 rownames(coexpr) <- colnames(coexpr) <- genes_selected
 rownames(pvals)  <- colnames(pvals)  <- genes_selected
 
@@ -54,7 +52,7 @@ for (i in seq_along(module_list)) {
       ont           = "ALL",
       universe      = universe,
       pAdjustMethod = "BH",
-      pvalueCutoff  = 0.05
+      pvalueCutoff  = 0.1
     )
   }, error = function(e) NULL)
 
