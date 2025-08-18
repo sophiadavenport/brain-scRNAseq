@@ -14,10 +14,13 @@ args = parser.parse_args()
 def get_individuallevel_module_exp(adata, module_df):
     modules = module_df['module'].unique()
     if 'Individual' in list(adata.obs.columns):
+        individual_col='Individual'
         individuals = adata.obs['Individual'].unique()
     elif 'individual_id_anon' in list(adata.obs.columns):
+        individual_col='individual_id_anon'
         individuals = adata.obs['individual_id_anon'].unique()
     else:
+        individual_col='individualID'
         individuals = adata.obs['individualID'].unique()
     matrix = pd.DataFrame(index=modules, columns=individuals, dtype=float)
     for module_num in list(module_df['module'].unique()):
@@ -26,8 +29,8 @@ def get_individuallevel_module_exp(adata, module_df):
 
         individual_means = {}
 
-        for ind in list(mod_adata.obs.Individual.unique()):
-            ind_adata=mod_adata[mod_adata.obs.Individual==ind]
+        for ind in list(mod_adata.obs[individual_col].unique()):
+            ind_adata=mod_adata[mod_adata.obs[individual_col]==ind]
             gene_means = np.mean(ind_adata.layers['normalized_counts'], axis=0)
             module_mean = np.mean(gene_means)
             individual_means[ind] = module_mean
@@ -40,7 +43,7 @@ adata = sc.read_h5ad(args.adata)
 
 adata.obs["Celltype_clean"] = adata.obs[args.celltype_col].astype(str).str.replace(r" \+ ", "_", regex=True).str.replace(r" ", "_", regex=True).str.replace(r"\(", "", regex=True).str.replace(r"\)", "", regex=True).str.replace("/", "-")
 
-cell_adata = adata[adata.obs["Celltype_clean"]==args.current_celltype, :]
+cell_adata=adata[adata.obs["Celltype_clean"]==args.current_celltype, :]
 
 modules_df=pd.read_csv(args.modules)
 
