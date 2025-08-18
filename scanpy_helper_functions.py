@@ -52,19 +52,19 @@ def check_adata_format(adatas, batches, data_sources, celltype_colnames, subtype
         ######################################################### Filtering:
         print('standard preprocess...\n')
         print(data_source, 'pre-filtering steps shape: ', adata.shape, "\n")
-        adata.var["mt"] = adata.var_names.str.startswith("MT-") #human mitochondrial genes specified
-        adata.var["ribo"] = adata.var_names.str.startswith(("RPS", "RPL"))
-        adata.var["hb"] = adata.var_names.str.contains("^HB[^(P)]")
+        adata.var["mt"]=adata.var_names.str.startswith("MT-") #human mitochondrial genes specified
+        adata.var["ribo"]=adata.var_names.str.startswith(("RPS", "RPL"))
+        adata.var["hb"]=adata.var_names.str.contains("^HB[^(P)]")
         sc.pp.calculate_qc_metrics(adata, qc_vars=["mt", "ribo", "hb"], inplace=True, log1p=True)
         
         sc.pp.filter_cells(adata, min_genes=100)
         sc.pp.filter_genes(adata, min_cells=3)
         print('number of cells with greater than 10% mitochondrial genes',len(adata[(adata.obs.pct_counts_mt > 10)]), "\n")
-        adata = adata[(adata.obs.pct_counts_mt < 10)] #filtering out cells with greater than 10% mitochondrial genes
+        adata=adata[(adata.obs.pct_counts_mt < 10)] #filtering out cells with greater than 10% mitochondrial genes
         
         #Ensuring that batch is category type
         if adata.obs[batch].dtype.name != 'category':
-            adata.obs[batch] = adata.obs[batch].apply(lambda x: f'Batch{x}' if adata.obs[batch].dtype.name != 'category' else x).astype('category')
+            adata.obs[batch]=adata.obs[batch].apply(lambda x: f'Batch{x}' if adata.obs[batch].dtype.name != 'category' else x).astype('category')
         ######################################################### Scrublet to Identify Doublets:
         print('starting scrublet analysis')
         print('pre-scrublet adata shape: ', adata.shape, "\n")
@@ -74,27 +74,27 @@ def check_adata_format(adatas, batches, data_sources, celltype_colnames, subtype
                 predicted_doublet_idx=list(adata[adata.obs.predicted_doublet==True].obs.index)
                 print(len(predicted_doublet_idx), " number of doublets predicted across the dataset ", data_source, "\n")
                 if len(predicted_doublet_idx) > 0:
-                    adata = adata[~adata.obs.index.isin(predicted_doublet_idx)] #filtering cells in predicted doublet index list out of adata object
+                    adata=adata[~adata.obs.index.isin(predicted_doublet_idx)] #filtering cells in predicted doublet index list out of adata object
                     print('doublets removed from', data_source, 'new shape: ', adata.shape, "\n")
                 else:
                     print('no doublets to remove from', data_source, "\n")
             except Exception as e:
                 print('scrublet with batch but without batch separation failed for ', data_source, "\n")
                 print(f'Error: {str(e)}', "\n")
-                batch_ids = adata.obs[batch].unique()
-                predicted_doublet_idx = []
+                batch_ids=adata.obs[batch].unique()
+                predicted_doublet_idx=[]
                 for batch in batch_ids:
                     print("scrubbing batch: ", batch)
-                    adata_batch = adata[adata.obs["batch"] == batch]
+                    adata_batch=adata[adata.obs["batch"] == batch]
                     sc.pp.scrublet(adata_batch) #performing scrublet on individual batches #may need to look at adjusting number of principal components later
 
                     predicted_doublet_idx.append(list(adata_batch[adata_batch.obs.predicted_doublet == True].obs.index)) #pulling a list of cell where predicted_doublet is true and adding this to the list of predicted doublet cells for the entire batch
     
-                flat_predicted_doublet_idx = [cell_id for batch in predicted_doublet_idx for cell_id in batch]
+                flat_predicted_doublet_idx=[cell_id for batch in predicted_doublet_idx for cell_id in batch]
                 print(len(flat_predicted_doublet_idx), ": number of doublets predicted across the dataset ", data_source, "\n")     
                 if len(flat_predicted_doublet_idx) > 0:
                     print('Done with scrublet, starting filter out of doublets \n')
-                    adata = adata[~adata.obs.index.isin(flat_predicted_doublet_idx)] #filtering cells in predicted doublet index list out of adata object
+                    adata=adata[~adata.obs.index.isin(flat_predicted_doublet_idx)] #filtering cells in predicted doublet index list out of adata object
                     print('done filtering of doublets from adata ', data_source, "\n")
                 else: #no cells to filter out so continue
                     print(data_source, ' has no predicted doublets. Adata shape: ', adata.shape, "\n")
@@ -102,7 +102,7 @@ def check_adata_format(adatas, batches, data_sources, celltype_colnames, subtype
             sc.pp.scrublet(adata)
             predicted_doublet_idx=list(adata[adata.obs.predicted_doublet==True].obs.index)
             print(len(predicted_doublet_idx), " number of doublets predicted across the dataset ", data_source, '\n')
-            adata = adata[~adata.obs.index.isin(predicted_doublet_idx)] #filtering cells in predicted doublet index list out of adata object
+            adata=adata[~adata.obs.index.isin(predicted_doublet_idx)] #filtering cells in predicted doublet index list out of adata object
             print('done filtering of doublets from adata ', data_source)
         print('adata shape after scrublet: ', adata.shape, '\n')
         ################################################# Normalizing Data:
@@ -110,7 +110,7 @@ def check_adata_format(adatas, batches, data_sources, celltype_colnames, subtype
             print(data_source,' already logged and normalized counts \n')
         else:
             print(adata, 'normalizing and log transforming... \n')
-            adata.layers["counts"] = adata.X.copy()
+            adata.layers["counts"]=adata.X.copy()
             sc.pp.normalize_total(adata)
             sc.pp.log1p(adata)
         
@@ -126,7 +126,7 @@ def check_adata_format(adatas, batches, data_sources, celltype_colnames, subtype
                 
         ############################################# Standardizing Obs Columns:
         if 'datasource' not in adata.obs.columns:
-            adata.obs['datasource'] = np.full(adata.obs.shape[0], data_source)
+            adata.obs['datasource']=np.full(adata.obs.shape[0], data_source)
 
         if celltype_colname != 'Celltype':
             adata.obs.rename(columns={celltype_colname: 'Celltype'}, inplace=True)
@@ -135,7 +135,7 @@ def check_adata_format(adatas, batches, data_sources, celltype_colnames, subtype
             if subtype_colname != 'Subtype':
                 adata.obs.rename(columns={subtype_colname: 'Subtype'}, inplace=True)
         else:
-            adata.obs['Subtype'] = np.full(adata.obs.shape[0], 'NA')
+            adata.obs['Subtype']=np.full(adata.obs.shape[0], 'NA')
 
         if condition_colname != 'Condition':
             adata.obs.rename(columns={condition_colname: 'Condition'}, inplace=True)
@@ -144,7 +144,7 @@ def check_adata_format(adatas, batches, data_sources, celltype_colnames, subtype
             if adata.obs['Condition'].nunique() > 3:
                 adata.obs.rename(columns={'Condition': 'Original_Condition'}, inplace=True)
         
-                adata.obs['Condition'] = adata.obs['Original_Condition'].map(
+                adata.obs['Condition']=adata.obs['Original_Condition'].map(
                     lambda x: 'Control' if x == 'CTR' else ('MS' if x in ['PPMS', 'RRMS', 'SPMS'] else x)
                     )
             else:
@@ -157,21 +157,21 @@ def check_adata_format(adatas, batches, data_sources, celltype_colnames, subtype
                 adata.obs.rename(columns={age_colname: 'Age'}, inplace=True)
                 adata.obs.Age=adata.obs.Age.round().astype('Int64')
         else:
-            adata.obs['Age'] = pd.Series([pd.NA] * adata.obs.shape[0], dtype='Int64')
+            adata.obs['Age']=pd.Series([pd.NA] * adata.obs.shape[0], dtype='Int64')
         
-        standardized_sex_encoding = {'male': 'M', 'Male': 'M', 'MALE': 'M', 'm': 'M', 'M': 'M', 1: 'M',
+        standardized_sex_encoding={'male': 'M', 'Male': 'M', 'MALE': 'M', 'm': 'M', 'M': 'M', 1: 'M',
                                      'female': 'F', 'Female': 'F', 'FEMALE': 'F', 'f': 'F', 'F': 'F', 0: 'F', 'XX': 'F', 'XY': 'M', 'XYY': 'M'}
-        common_categories = ['M', 'F', 'NA'] 
+        common_categories=['M', 'F', 'NA'] 
         if sex_colname != None:
             if sex_colname != 'Sex':
-                mapped_sex = adata.obs[sex_colname].map(standardized_sex_encoding)
-                mapped_sex = mapped_sex.astype("object").fillna('NA')
-                adata.obs['Sex'] = pd.Categorical(mapped_sex, categories=common_categories)
+                mapped_sex=adata.obs[sex_colname].map(standardized_sex_encoding)
+                mapped_sex=mapped_sex.astype("object").fillna('NA')
+                adata.obs['Sex']=pd.Categorical(mapped_sex, categories=common_categories)
         else:
-            adata.obs['Sex'] = pd.Categorical(['NA'] * adata.shape[0], categories=common_categories)
+            adata.obs['Sex']=pd.Categorical(['NA'] * adata.shape[0], categories=common_categories)
 
         #asserting categorical for Sex
-        adata.obs['Sex'] = adata.obs['Sex'].astype(pd.CategoricalDtype(categories=common_categories))
+        adata.obs['Sex']=adata.obs['Sex'].astype(pd.CategoricalDtype(categories=common_categories))
 
         ############################################# PCA + Integration:
         if batch!=None:
@@ -179,12 +179,12 @@ def check_adata_format(adatas, batches, data_sources, celltype_colnames, subtype
                 sc.tl.pca(adata)
                 sc.external.pp.scanorama_integrate(adata, key=batch)
             except Exception as e:
-                error_msg = str(e)
+                error_msg=str(e)
                 print(f"{data_source}: Scanorama error occurred: {error_msg} \n")
                 if "non-contiguous batches" in error_msg.lower():
                     print(f"{data_source}: Attempting to fix non-contiguous batches by sorting...")
                     try:
-                        adata = adata[np.argsort(adata.obs[batch].values)].copy()
+                        adata=adata[np.argsort(adata.obs[batch].values)].copy()
                         sc.external.pp.scanorama_integrate(adata, key=batch)
                         print(f"{data_source}: Scanorama successfully rerun with contiguous batches.\n")
                     except Exception as inner_e:
@@ -205,7 +205,7 @@ def assign_celltype_class(celltype):
     celltype definitions.
 
     Apply with code such as this: 
-    adata.obs['Celltype_Class'] = adata.obs.apply(
+    adata.obs['Celltype_Class']=adata.obs.apply(
     lambda row: sh.assign_celltype_class(row['Celltype']), axis=1
 )
     '''
@@ -230,7 +230,7 @@ def assign_celltype_fullnames(celltype):
     '''
     This function should be used to take the Celltype from AD and create a new column with full names (more friendly to plotting)
     Apply with code such as this: 
-    adata.obs['Celltype_Class'] = adata.obs.apply(
+    adata.obs['Celltype_Class']=adata.obs.apply(
     lambda row: sh.assign_celltype_fullnames(row['Celltype']), axis=1
     )
     '''
@@ -251,7 +251,7 @@ def assign_celltype_fullnames(celltype):
     else:
         return celltype
     
-def create_umaps(adata, adata_name, colnames, date, sep_by=None, sep_by_colnames = None, extra_info=None, point_size=2):
+def create_umaps(adata, adata_name, colnames, date, sep_by=None, sep_by_colnames=None, extra_info=None, point_size=2):
     '''
     Input:
         - adata: assumption is that adata has been run through check_adata_format() and join_adatas() first
@@ -300,15 +300,15 @@ def mtx_to_adata(counts_path, gene_names_path, metadata_path, genename_col=None,
         - directory_path: path to location for the new file to be stored
         - raw_counts: path to matrix of raw counts (use if both preprocessed and raw counts are available)
     '''
-    adata = sc.read_mtx(counts_path)
+    adata=sc.read_mtx(counts_path)
     if metadata_path.endswith('.csv') or metadata_path.endswith('.txt'):
-        metadata = pd.read_csv(metadata_path)
+        metadata=pd.read_csv(metadata_path)
     elif metadata_path.endswith('.tsv'):
-        metadata = pd.read_csv(metadata_path, sep='\t')
+        metadata=pd.read_csv(metadata_path, sep='\t')
     if gene_names_path.endswith('.csv') or gene_names_path.endswith('.txt'):
-        genes = pd.read_csv(gene_names_path)
+        genes=pd.read_csv(gene_names_path)
     elif gene_names_path.endswith('.tsv'):
-        genes = pd.read_csv(gene_names_path, sep='\t')
+        genes=pd.read_csv(gene_names_path, sep='\t')
 
     if len(genes) == adata.shape[1] and len(metadata)==adata.shape[0]:
         print('processed counts matrix orientation is correct') #no need to transpose
@@ -323,12 +323,12 @@ def mtx_to_adata(counts_path, gene_names_path, metadata_path, genename_col=None,
         else:
             print('Spatial data successfully loaded')
             # Save spatial coordinates to adata.obsm
-            adata.obsm['spatial'] = spatial.values
+            adata.obsm['spatial']=spatial.values
     #checking metadata columns for mixed types
     for col in metadata.columns:
         if metadata[col].apply(type).nunique() > 1:
             print(f"Column '{col}' has mixed types. Converting to string.")
-            metadata[col] = metadata[col].astype(str)
+            metadata[col]=metadata[col].astype(str)
     adata.obs=metadata
     if genename_col!=None:
         adata.var_names=genes[genename_col]
@@ -338,7 +338,7 @@ def mtx_to_adata(counts_path, gene_names_path, metadata_path, genename_col=None,
         adata.obs_names=metadata[barcodes_col]
 
     if raw_counts_path !=None:
-        raw = sc.read_mtx(raw_counts_path)
+        raw=sc.read_mtx(raw_counts_path)
         if len(genes) == raw.shape[1] and len(metadata)==raw.shape[0]:
             print('raw counts matrix orientation is correct') #no need to transpose
         elif len(genes) == raw.shape[0] and len(metadata)==raw.shape[1]:
@@ -347,7 +347,7 @@ def mtx_to_adata(counts_path, gene_names_path, metadata_path, genename_col=None,
         else:
             print('shape of raw counts matrix and genes/metadata does not match')
             exit()
-        adata.layers['raw counts'] = raw
+        adata.layers['raw counts']=raw
 
     if data_name != None and directory_path!=None:
         adata.write(directory_path+data_name+'.h5ad')
@@ -358,53 +358,53 @@ def mtx_to_adata(counts_path, gene_names_path, metadata_path, genename_col=None,
 
 def add_gene_names_to_adata(adata):
     #Dictionary mapping Ensembl IDs to gene names from pybiomart import Server, Dataset
-    server = Server(host='http://www.ensembl.org')
-    dataset = Dataset(name='hsapiens_gene_ensembl', host='http://www.ensembl.org')
+    server=Server(host='http://www.ensembl.org')
+    dataset=Dataset(name='hsapiens_gene_ensembl', host='http://www.ensembl.org')
     ensembl_df=dataset.query(attributes=['ensembl_gene_id', 'external_gene_name'])
     ensembl_df=ensembl_df[ensembl_df['Gene stable ID'].isin(list(adata.var_names)) == True].dropna()
-    df = pd.Series(ensembl_df['Gene name'].values, index=ensembl_df['Gene stable ID'].values).to_dict()
+    df=pd.Series(ensembl_df['Gene name'].values, index=ensembl_df['Gene stable ID'].values).to_dict()
 
     #Add 'gene_name' to adata
-    gene_names = []
-    valid_ensembl_ids = []
+    gene_names=[]
+    valid_ensembl_ids=[]
     for ensembl_id in adata.var_names:
         if ensembl_id in df:
             gene_names.append(df[ensembl_id])
             valid_ensembl_ids.append(ensembl_id)
             
-    adata.var['gene_name'] = pd.Series(gene_names, index=valid_ensembl_ids)
+    adata.var['gene_name']=pd.Series(gene_names, index=valid_ensembl_ids)
     origin_genes_num=adata.shape[1]
     #Remove the genes that are not in the Ensembl df from the adata
-    adata = adata[:, adata.var_names.isin(valid_ensembl_ids)]
+    adata=adata[:, adata.var_names.isin(valid_ensembl_ids)]
     print("Number of genes removed due to no mapping gene id: ", origin_genes_num-adata.shape[1])
     
     return adata
 
 def plot_celltype_bar(adata, x_col, save_string, colorby=None, percent_true=False, title=None, x_label=None, y_label=None):
     if x_label is None:
-        x_label = x_col.replace("_", " ").title()
+        x_label=x_col.replace("_", " ").title()
     if y_label is None:
-        y_label = "Percentage of Cells" if percent_true else "Number of Cells"
+        y_label="Percentage of Cells" if percent_true else "Number of Cells"
     if title is None:
-        title = f"{'Proportion' if percent_true else 'Number'} of Cells per {x_label}"
+        title=f"{'Proportion' if percent_true else 'Number'} of Cells per {x_label}"
 
     if colorby:
-        counts = adata.obs.groupby(x_col, observed=False)[colorby].value_counts()
-        counts_unstacked = counts.unstack(fill_value=0)
+        counts=adata.obs.groupby(x_col, observed=False)[colorby].value_counts()
+        counts_unstacked=counts.unstack(fill_value=0)
         if percent_true:
-            data = counts_unstacked.div(counts_unstacked.sum(axis=1), axis=0) * 100
+            data=counts_unstacked.div(counts_unstacked.sum(axis=1), axis=0) * 100
         else:
-            data = counts_unstacked
-        ax = data.plot(kind='bar', stacked=True, figsize=(10, 6))
-        legend_title = colorby.replace("_", " ").title()
+            data=counts_unstacked
+        ax=data.plot(kind='bar', stacked=True, figsize=(10, 6))
+        legend_title=colorby.replace("_", " ").title()
         ax.legend(title=legend_title, bbox_to_anchor=(1.05, 1), loc='upper left')
     else:
-        counts = adata.obs[x_col].value_counts().sort_index()
+        counts=adata.obs[x_col].value_counts().sort_index()
         if percent_true:
-            data = counts / counts.sum() * 100
+            data=counts / counts.sum() * 100
         else:
-            data = counts
-        ax = data.plot(kind='bar', color='skyblue', figsize=(8, 5))
+            data=counts
+        ax=data.plot(kind='bar', color='skyblue', figsize=(8, 5))
 
     ax.set_xlabel(x_label)
     ax.set_ylabel(y_label)
