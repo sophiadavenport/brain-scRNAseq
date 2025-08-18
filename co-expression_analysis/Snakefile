@@ -7,7 +7,7 @@ celltypes=['Oligodendrocytes', 'Microglia', 'OPCs_COPs', 'Astrocytes', 'Excitato
 
 rule all:
     input:
-        expand("results/{dataset}_{celltype}/{dataset}__{celltype}_teststats.csv", dataset=datasets.keys(), celltype=celltypes), 
+        expand("results/{dataset}__{celltype}/{dataset}__{celltype}_teststats.csv", dataset=datasets.keys(), celltype=celltypes), 
         expand("results/{dataset}__{celltype}/{dataset}__{celltype}_individualmatrix.csv", dataset=datasets.keys(), celltype=celltypes), 
         expand("results/{dataset}__{celltype}/module_geneexp_dist/{dataset}_KSstats.csv", celltype=celltypes, dataset=datasets.keys()), 
         expand("results/{dataset}__{celltype}/module_geneexp_dist/{dataset}_module_avg_abslogFC.csv", celltype=celltypes, dataset=datasets.keys()),
@@ -17,7 +17,7 @@ rule cscore:
     input:
         adata=lambda wildcards: datasets[wildcards.dataset]
     output:
-        coexpr="results/{dataset}_{celltype}/{dataset}__{celltype}_coexpr.csv",pvals="results/{dataset}_{celltype}/{dataset}__{celltype}_pvals.csv",teststats="results/{dataset}_{celltype}/{dataset}__{celltype}_teststats.csv",genes="results/{dataset}_{celltype}/{dataset}__{celltype}_genes.csv"
+        coexpr="results/{dataset}__{celltype}/{dataset}__{celltype}_coexpr.csv",pvals="results/{dataset}__{celltype}/{dataset}__{celltype}_pvals.csv",teststats="results/{dataset}__{celltype}/{dataset}__{celltype}_teststats.csv",genes="results/{dataset}__{celltype}/{dataset}__{celltype}_genes.csv"
     threads: 2
     params:
         celltype_col="Celltype_Class"
@@ -25,19 +25,19 @@ rule cscore:
         "envs/cscore_env.yaml"
     shell:
         """
-        python cscore.py --adata {input.adata} --celltype_col {params.celltype_col} --current_celltype {wildcards.celltype} --output_prefix results/{wildcards.dataset}_{wildcards.celltype}/{wildcards.dataset}__{wildcards.celltype}
+        python cscore.py --adata {input.adata} --celltype_col {params.celltype_col} --current_celltype {wildcards.celltype} --output_prefix results/{wildcards.dataset}__{wildcards.celltype}/{wildcards.dataset}__{wildcards.celltype}
         """
 
 rule wgcna_go:
     input:
-        coexpr="results/{dataset}_{celltype}/{dataset}__{celltype}_coexpr.csv",pvals="results/{dataset}_{celltype}/{dataset}__{celltype}_pvals.csv",genes="results/{dataset}_{celltype}/{dataset}__{celltype}_genes.csv"
+        coexpr="results/{dataset}__{celltype}/{dataset}__{celltype}_coexpr.csv",pvals="results/{dataset}__{celltype}/{dataset}__{celltype}_pvals.csv",genes="results/{dataset}__{celltype}/{dataset}__{celltype}_genes.csv"
     output:
         modules="results/{dataset}__{celltype}/modules/{dataset}_modules.csv"
     conda:
         "envs/wgcnago_env.yaml"
     shell:
         """
-        Rscript wgcna_go.R {input.coexpr} {input.pvals} {input.genes} results/{wildcards.dataset}__{wildcards.celltype}/modules
+        Rscript wgcna_go.R {input.coexpr} {input.pvals} {input.genes} results/{wildcards.dataset}_{wildcards.celltype}/modules
         """
 
 rule individual_matrix_exp:
