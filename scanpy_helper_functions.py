@@ -5,7 +5,7 @@ import numpy as np
 import scipy.sparse
 import anndata as an
 import harmonypy # type: ignore
-import matplotlib
+import matplotlib as plt
 import matplotlib.colors as mcolors
 import random
 from pybiomart import Server, Dataset # type: ignore
@@ -379,3 +379,35 @@ def add_gene_names_to_adata(adata):
     print("Number of genes removed due to no mapping gene id: ", origin_genes_num-adata.shape[1])
     
     return adata
+
+def plot_celltype_bar(adata, x_col, save_string, colorby=None, percent_true=False, title=None, x_label=None, y_label=None):
+    if x_label is None:
+        x_label = x_col.replace("_", " ").title()
+    if y_label is None:
+        y_label = "Percentage of Cells" if percent_true else "Number of Cells"
+    if title is None:
+        title = f"{'Proportion' if percent_true else 'Number'} of Cells per {x_label}"
+
+    if colorby:
+        counts = adata.obs.groupby(x_col, observed=False)[colorby].value_counts()
+        counts_unstacked = counts.unstack(fill_value=0)
+        if percent_true:
+            data = counts_unstacked.div(counts_unstacked.sum(axis=1), axis=0) * 100
+        else:
+            data = counts_unstacked
+        ax = data.plot(kind='bar', stacked=True, figsize=(10, 6))
+        legend_title = colorby.replace("_", " ").title()
+        ax.legend(title=legend_title, bbox_to_anchor=(1.05, 1), loc='upper left')
+    else:
+        counts = adata.obs[x_col].value_counts().sort_index()
+        if percent_true:
+            data = counts / counts.sum() * 100
+        else:
+            data = counts
+        ax = data.plot(kind='bar', color='skyblue', figsize=(8, 5))
+
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
+    ax.set_title(title)
+    plt.tight_layout()
+    plt.figsave(save_string)
