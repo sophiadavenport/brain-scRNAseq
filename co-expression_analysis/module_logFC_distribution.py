@@ -14,7 +14,7 @@ parser.add_argument("--modules_csv_path", required=True)
 parser.add_argument("--de_folder", required=True)
 parser.add_argument("--ks_csv_path", required=True)
 parser.add_argument("--avg_logfc_csv_path", required=True)
-parser.add_argument("--number_dist", required=True)
+parser.add_argument("--number_dist", type=int, required=True)
 args = parser.parse_args()
 
 de_csv_path=f"{args.de_folder}/{args.dataset}_DEG/results/{args.dataset}_celltypeclass__{args.celltype}_edger_results.csv"
@@ -100,56 +100,64 @@ def logfc_distribution_per_module(celltype, dataset, modules_csv_path, de_csv_pa
 
     ks_df=pd.DataFrame(ks_results)
     
-    ks_df['ks_p_values']=ks_df['ks_p_values'].apply(lambda x: [round(float(p), 5) for p in x])
+    if not ks_df.empty:
+        ks_df["ks_p_values"] = ks_df["ks_p_values"].apply(lambda x: [round(float(p), 5) for p in x])
+    else:
+        print(f"No valid KS-test results for {dataset} {celltype}")
     os.makedirs(os.path.dirname(ks_csv_path), exist_ok=True)
     ks_df.to_csv(ks_csv_path, index=False)
 
     num_modules = len(plot_data)
-    ncols = 3
-    nrows = (num_modules + ncols - 1) // ncols
-    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(ncols * 4, nrows * 3))
-    axes = axes.flatten()
+    if num_modules > 0:
+        ncols = 3
+        nrows = (num_modules + ncols - 1) // ncols
+        fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(ncols * 4, nrows * 3))
+        axes = axes.flatten()
 
-    for idx, (module_id, data) in enumerate(plot_data.items()):
-        ax = axes[idx]
-        sns.histplot(data['background_logfc'], bins=50, color='lightgray', alpha=0.5, kde=False, label='Random Genes', ax=ax)
-        sns.histplot(data['module_logfc'], bins=50, color='steelblue', alpha=0.8, kde=False, label='Module Genes', ax=ax)
-        ax.set_title(f"Module {module_id}")
-        ax.set_xlabel('|logFC|')
-        ax.set_ylabel('Number of Genes')
-        ax.legend()
+        for idx, (module_id, data) in enumerate(plot_data.items()):
+            ax = axes[idx]
+            sns.histplot(data['background_logfc'], bins=50, color='lightgray', alpha=0.5, kde=False, label='Random Genes', ax=ax)
+            sns.histplot(data['module_logfc'], bins=50, color='steelblue', alpha=0.8, kde=False, label='Module Genes', ax=ax)
+            ax.set_title(f"Module {module_id}")
+            ax.set_xlabel('|logFC|')
+            ax.set_ylabel('Number of Genes')
+            ax.legend()
 
-    for ax in axes[len(plot_data):]:
-        ax.axis('off')
+        for ax in axes[num_modules:]:
+            ax.axis('off')
 
-    plt.suptitle(f"{dataset} {celltype}: logFC Distribution per Module", fontsize=16)
-    plt.tight_layout(rect=[0, 0, 1, 0.96])
-    plot_dir = os.path.dirname(ks_csv_path)
-    panel_path = os.path.join(plot_dir, f"{dataset}_{celltype}_logFC_panel.png")
-    plt.savefig(panel_path, dpi=300)
-    plt.close()
-    print(f"Saved panel figure: {panel_path}")
-    for module_id, data in plot_data.items():
-        plt.figure(figsize=(8, 5))
-        sns.histplot(data['background_logfc'], bins=50, color='lightgray', alpha=0.5, kde=False, label='Random Genes')
-        sns.histplot(data['module_logfc'], bins=50, color='steelblue', alpha=0.8, kde=False, label='Module Genes')
-        plt.title(f"{dataset} {celltype}: Module {module_id}")
-        plt.xlabel('|logFC|')
-        plt.ylabel('Number of Genes')
-        plt.legend()
-        plt.tight_layout()
-        filename = f"module{module_id}_{dataset}_{celltype}_logFCdist.png"
-        save_path = os.path.join(plot_dir, filename)
-        plt.savefig(save_path, dpi=300)
+        plt.suptitle(f"{dataset} {celltype}: logFC Distribution per Module", fontsize=16)
+        plt.tight_layout(rect=[0, 0, 1, 0.96])
+        plot_dir = os.path.dirname(ks_csv_path)
+        panel_path = os.path.join(plot_dir, f"{dataset}_{celltype}_logFC_panel.png")
+        plt.savefig(panel_path, dpi=300)
         plt.close()
+        print(f"Saved panel figure: {panel_path}")
 
-    significant_modules = ks_df[ks_df['median_ks_pval'] < 0.05]['module'].tolist()
-
-    if significant_modules:
-        print("Modules with median KS-test p-value < 0.05:")
-        print(", ".join(map(str, significant_modules)))
+        # Save per-module plots
+        for module_id, data in plot_data.items():
+            plt.figure(figsize=(8, 5))
+            sns.histplot(data['background_logfc'], bins=50, color='lightgray', alpha=0.5, kde=False, label='Random Genes')
+            sns.histplot(data['module_logfc'], bins=50, color='steelblue', alpha=0.8, kde=False, label='Module Genes')
+            plt.title(f"{dataset} {celltype}: Module {module_id}")
+            plt.xlabel('|logFC|')
+            plt.ylabel('Number of Genes')
+            plt.legend()
+            plt.tight_layout()
+            filename = f"module{module_id}_{dataset}_{celltype}_logFCdist.png"
+            save_path = os.path.join(plot_dir, filename)
+            plt.savefig(save_path, dpi=300)
+            plt.close()
     else:
-        print("No modules with median KS-test p-value < 0.05 found.")
+        print(f"No valid modules for plotting in {dataset} {celltype}")
+
+
+    if not ks_df.empty and "median_ks_pval" in ks_df.columns:
+        significant_modules = ks_df[ks_df['median_ks_pval'] < 0.05]['module'].tolist()
+        print(f"Significant modules ({len(significant_modules)}): {significant_modules}")
+    else:
+        significant_modules = []
+        print(f"No significant modules for {dataset} {celltype}")
 
 if not os.path.isfile(de_csv_path):
     print(f"DE file not found: {de_csv_path}. Skipping computation for {args.dataset} - {args.celltype}.")
