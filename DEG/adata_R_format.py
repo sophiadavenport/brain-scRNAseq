@@ -66,7 +66,7 @@ if 'n_genes_by_counts' not in cell_subset.obs.columns:
 def pseudobulk(celltype_adata, donor_col, keep_obs=[], replicates=2):
     pbs=[]
     for cur_donor in celltype_adata.obs[donor_col].unique():
-        indv_cell_subset = celltype_adata[celltype_adata.obs[donor_col] == cur_donor].copy()
+        indv_cell_subset = celltype_adata[celltype_adata.obs[donor_col]==cur_donor].copy()
         n_cells = indv_cell_subset.n_obs
         if n_cells < 10:
             continue #skip individual if has less than 10 cells contributing to the pseudobulk
@@ -94,6 +94,5 @@ def pseudobulk(celltype_adata, donor_col, keep_obs=[], replicates=2):
     counts_df = pd.DataFrame(pb.X, columns = pb.var_names, index=pb.obs_names) #counts df for celltype 
     counts_df.T.to_csv(args.counts_path) #genes by cells for edgeR
     pb.obs.to_csv(args.metadata_path)
-
 
 pseudobulk(celltype_adata=cell_subset, donor_col='Individual', keep_obs=['pct_counts_mt', 'n_genes_by_counts', 'Condition', 'batch', 'Individual', 'Age', 'Sex'], replicates=2)
