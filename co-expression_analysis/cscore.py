@@ -6,6 +6,7 @@ import anndata as ad
 import argparse
 import sys
 import os
+import gc
 
 parser=argparse.ArgumentParser()
 parser.add_argument("--adata", required=True)
@@ -23,6 +24,10 @@ adata.obs["Celltype_clean"]=adata.obs[args.celltype_col].astype(str).str.replace
 cell_adata=adata[adata.obs["Celltype_clean"]==args.current_celltype, :]
 
 print(cell_adata.shape)
+cell_adata=cell_adata.copy() #clean copy
+
+del adata #clearing up memory
+gc.collect()
 
 if cell_adata.X.max() < 100: #already normalized... resetting to raw counts
     cell_adata.X=cell_adata.layers["counts"]
