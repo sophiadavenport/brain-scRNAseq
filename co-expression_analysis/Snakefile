@@ -12,7 +12,7 @@ rule all:
         expand("results/{dataset}__{celltype}/module_geneexp_dist/{dataset}_KSstats.csv", celltype=celltypes, dataset=datasets.keys()), 
         expand("results/{dataset}__{celltype}/module_geneexp_dist/{dataset}_module_avg_abslogFC.csv", celltype=celltypes, dataset=datasets.keys()),
         expand("results/{dataset}__{celltype}/DEG_mod_association/{dataset}_fisherstats.csv", celltype=celltypes, dataset=datasets.keys()),
-        expand("results/{dataset}_liana.csv", dataset=datasets.keys())
+        'results/comparisons/datasets_compared.csv', 'results/comparisons/datasets_comparisoncounts.xlsx'
 
 rule cscore:
     input:
@@ -91,7 +91,7 @@ rule run_liana:
     input:
         adata=lambda wildcards: datasets[wildcards.dataset]
     output:
-        liana_csv="results/{dataset}_liana.csv"
+        liana_csv="results/comparisons/{dataset}_liana.csv"
     threads: 1
     params:
         celltype_col="Celltype_Class"
@@ -100,4 +100,45 @@ rule run_liana:
     shell:
         """
         python run_liana.py --adata {input.adata} --celltype_col {params.celltype_col} --output_csv {output.liana_csv}
+        """
+
+rule compare_modules:
+    input:
+        liana_csv="results/{dataset}_liana.csv"
+    output:
+        all_celltype_mods='results/comparisons/{dataset}/{dataset}_allmodules.csv', correlation_df='results/comparisons/{dataset}/{dataset}_module_correlation.csv'
+    threads: 4
+    params:
+        celltype_list="Oligodendrocytes Microglia OPCs_COPs Astrocytes Excitatory_neurons Vascular_Cells Inhibitory_neurons"
+    conda:
+        "envs/python_stats.yaml"
+    shell:
+        """
+        python comparing_modules.py --liana_csv {input.liana_csv}  --dataset {wildcards.dataset} --all_celltype_modules_path {output.all_celltype_mods} --correlation_df_path {output.correlation_df} --celltype_list {params.celltype_list}
+        """
+
+rule annotate_lr_in_comparisons:
+    input:
+        all_celltype_mods='results/comparisons/{dataset}/{dataset}_allmodules.csv', correlation_df='results/comparisons/{dataset}/{dataset}_module_correlation.csv', liana_csv="results/comparisons/{dataset}_liana.csv"
+    output:
+        annotated_lr='results/comparisons/{dataset}/{dataset}_sig_correlations_annotated.csv'
+    threads: 4
+    conda:
+        "envs/liana_env.yaml"
+    shell:
+        """
+        python correlations_lr_anno.py --all_modules {input.all_celltype_mods}  --correlation_df {input.correlation_df} --dataset {wildcards.dataset} --outfile {output.annotated_lr} --liana_csv {input.liana_csv}
+        """
+
+rule across_disease_comparisons:
+    input:
+        annotated=expand('results/comparisons/{dataset}/{dataset}_sig_correlations_annotated.csv', dataset=datasets)
+    output:
+        combined_comparisons='results/comparisons/datasets_compared.csv', excel_outfile='results/comparisons/datasets_comparisoncounts.xlsx'
+    threads: 1
+    conda:
+        "envs/plotting_env.yaml"
+    shell:
+        """
+        python comparing_datasets.py --annotated_csvs {input.annotated} --outfile {output.combined_comparisons} --excel_outfile {output.excel_outfile}
         """
