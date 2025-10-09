@@ -36,7 +36,8 @@ def fishers_enrichment_per_module(modules_df, background_genes_set, deg_df, cell
     results_df['p_adj']=multipletests(results_df['p_value'], method='fdr_bh')[1]
     return(results_df)
 
-de_csv_path=f"{args.de_folder}/{args.dataset}_DEG/results/{args.dataset}_celltypeclass__{args.celltype}_edger_results.csv"
+#de_csv_path=f"{args.de_folder}/{args.dataset}_DEG/results/{args.dataset}_celltypeclass__{args.celltype}_edger_results.csv"
+de_csv_path=f"{args.de_folder}/{args.dataset}_DEG/results/{args.dataset}_celltype__{args.celltype}_edger_results.csv"
 deg_df=pd.read_csv(de_csv_path)
 background_genes_set=set(pd.read_csv(args.background_genes)['gene'])
 modules_df=pd.read_csv(args.modules_csv_path)

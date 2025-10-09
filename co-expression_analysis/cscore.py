@@ -16,6 +16,9 @@ parser.add_argument("--output_prefix", required=True)
 args=parser.parse_args()
 
 os.makedirs(os.path.dirname(args.output_prefix), exist_ok=True)
+def write_empty_outputs(prefix):
+    for suffix in ["_coexpr.csv", "_pvals.csv", "_teststats.csv", "_genes.csv"]:
+        np.savetxt(f"{prefix}{suffix}", np.array([]))
 
 adata=sc.read_h5ad(args.adata)
 
@@ -28,6 +31,11 @@ cell_adata=cell_adata.copy() #clean copy
 
 del adata #clearing up memory
 gc.collect()
+
+if cell_adata.n_obs < 100: #setting minimum number of cells to be 100
+    print(f"Skipping {args.current_celltype}: only {cell_adata.n_obs} cells")
+    write_empty_outputs(args.output_prefix)
+    sys.exit(0)
 
 if cell_adata.X.max() < 100: #already normalized... resetting to raw counts
     cell_adata.X=cell_adata.layers["counts"]

@@ -3,53 +3,61 @@ use_conda=True
 DE_BASE_DIR=config["de_base_dir"]
 FULL_GENE_LIST=config["full_gene_list"]
 datasets={"SZ": config["sz_adata_path"], "BD": config["bd_adata_path"], "MS": config["ms_adata_path"], "AD": config["ad_adata_path"], "ASD": config["asd_adata_path"]}
-celltypes=['Oligodendrocytes', 'Microglia', 'OPCs_COPs', 'Astrocytes', 'Excitatory_neurons', 'Vascular_Cells', 'Inhibitory_neurons']
+#celltypes=['Oligodendrocytes', 'Microglia', 'OPCs_COPs', 'Astrocytes', 'Excitatory_neurons', 'Vascular_Cells', 'Inhibitory_neurons']
+celltypes=['Oli_OPALIN', 'Exc_L4-5_RORB_IL1RAPL2', 'Oli_RASGRF1', 'Exc_L3-4_RORB_CUX2', 'Inh_ALCAM_TRPM3', 'Ast_GRM3', 'Exc_L3-5_RORB_PLCH1', 'Exc_L2-3_CBLN2_LINC02306', 'Exc_L6b', 'Exc_L6_THEMIS_NFIA', 'Mic_P2RY12', 'Ast_DPP10', 'OPC_DOCK5', 'Exc_L4-5_RORB_GABRG1', 'Inh_VIP_TSHZ2', 'Inh_L5-6_PVALB_STON2', 'Inh_PVALB_HTR4', 'Exc_L5-6_NP', 'Inh_PVALB_SULF1', 'Inh_LAMP5_NRG1_Rosehip', 'Opc_GRIA4', 'Inh_CUX2_MSR1', 'Exc_RELN_CHD7', 'Inh_VIP_ABI3BP', 'Exc_L5-6_RORB_LINC02196', 'Exc_NRGN', 'Exc_L6_CT', 'Inh_RYR3_TSHZ2', 'Inh_L3-5_SST_MAFB', 'capEndo', 'Inh_PVALB_CA8_Chandelier', 'Inh_FBN2_EPB41L4A', 'Inh_VIP_CLSTN2', 'Mic_DUSP1', 'Inh_L1-6_LAMP5_CA13', 'Exc_L5-6_IT_Car3', 'Inh_SGCD_PDE3A', 'Inh_ENOX2_SPHKAP', 'Inh_L1_PAX6_CA4', 'aSMC', 'Inh_SORCS1_TTN', 'Inh_GPC5_RIT2', 'Inh_LAMP5_RELN', 'Inh_L6_SST_NPY', 'Inh_PTPRK_FAM19A1', 'Fib2', 'Inh_VIP_THSD7B', 'Inh_L5-6_SST_TH', 'Inh_L1-2_PAX6_SCGN', 'Fib1', 'Mic_TPT1', 'Per1', 'aEndo', 'Opc_TPST1', 'CAMs', 'Exc_L5_ET', 'Ast_TPST1', 'vEndo', 'T_cells', 'Per2', 'vSMC', 'Mic_MKI67', 'Fib3']
+
+SELECTED_DATASET=config.get("dataset", None)
+if SELECTED_DATASET:
+    if SELECTED_DATASET not in datasets:
+        raise ValueError(f"Dataset '{SELECTED_DATASET}' not found in config file keys: {list(datasets.keys())}")
+    datasets={SELECTED_DATASET: datasets[SELECTED_DATASET]}
 
 rule all:
     input:
-        expand("results/{dataset}__{celltype}/{dataset}__{celltype}_teststats.csv", dataset=datasets.keys(), celltype=celltypes), 
-        expand("results/{dataset}__{celltype}/{dataset}__{celltype}_individualmatrix.csv", dataset=datasets.keys(), celltype=celltypes), 
-        expand("results/{dataset}__{celltype}/module_geneexp_dist/{dataset}_KSstats.csv", celltype=celltypes, dataset=datasets.keys()), 
-        expand("results/{dataset}__{celltype}/module_geneexp_dist/{dataset}_module_avg_abslogFC.csv", celltype=celltypes, dataset=datasets.keys()),
-        expand("results/{dataset}__{celltype}/DEG_mod_association/{dataset}_fisherstats.csv", celltype=celltypes, dataset=datasets.keys()),
-        'results/comparisons/datasets_compared.csv', 'results/comparisons/datasets_comparisoncounts.xlsx'
+        expand("subtype_results/{dataset}__{celltype}/{dataset}__{celltype}_teststats.csv", dataset=datasets.keys(), celltype=celltypes), 
+        expand("subtype_results/{dataset}__{celltype}/{dataset}__{celltype}_individualmatrix.csv", dataset=datasets.keys(), celltype=celltypes), 
+        expand("subtype_results/{dataset}__{celltype}/module_geneexp_dist/{dataset}_KSstats.csv", celltype=celltypes, dataset=datasets.keys()), 
+        expand("subtype_results/{dataset}__{celltype}/module_geneexp_dist/{dataset}_module_avg_abslogFC.csv", celltype=celltypes, dataset=datasets.keys()),
+        expand("subtype_results/{dataset}__{celltype}/DEG_mod_association/{dataset}_fisherstats.csv", celltype=celltypes, dataset=datasets.keys()),
+        'subtype_results/comparisons/datasets_compared.csv', 'subtype_results/comparisons/datasets_comparisoncounts.xlsx',
+        expand('subtype_results/comparisons/{dataset}/{dataset}_sig_lr_celltype_chordplot.pdf', dataset=datasets.keys())
 
 rule cscore:
     input:
         adata=lambda wildcards: datasets[wildcards.dataset]
     output:
-        coexpr="results/{dataset}__{celltype}/{dataset}__{celltype}_coexpr.csv",pvals="results/{dataset}__{celltype}/{dataset}__{celltype}_pvals.csv",teststats="results/{dataset}__{celltype}/{dataset}__{celltype}_teststats.csv",genes="results/{dataset}__{celltype}/{dataset}__{celltype}_genes.csv"
-    threads: 4
+        coexpr="subtype_results/{dataset}__{celltype}/{dataset}__{celltype}_coexpr.csv",pvals="subtype_results/{dataset}__{celltype}/{dataset}__{celltype}_pvals.csv",teststats="subtype_results/{dataset}__{celltype}/{dataset}__{celltype}_teststats.csv",genes="subtype_results/{dataset}__{celltype}/{dataset}__{celltype}_genes.csv"
+    threads: 2
     params:
-        celltype_col="Celltype_Class"
+        celltype_col="unified_subtype" #celltype_col="Celltype_Class"
     conda:
         "envs/cscore_env.yaml"
     shell:
         """
-        python cscore.py --adata {input.adata} --celltype_col {params.celltype_col} --current_celltype {wildcards.celltype} --output_prefix results/{wildcards.dataset}__{wildcards.celltype}/{wildcards.dataset}__{wildcards.celltype}
+        python cscore.py --adata {input.adata} --celltype_col {params.celltype_col} --current_celltype {wildcards.celltype} --output_prefix subtype_results/{wildcards.dataset}__{wildcards.celltype}/{wildcards.dataset}__{wildcards.celltype}
         """
 
 rule wgcna_go:
     input:
-        coexpr="results/{dataset}__{celltype}/{dataset}__{celltype}_coexpr.csv",pvals="results/{dataset}__{celltype}/{dataset}__{celltype}_pvals.csv",genes="results/{dataset}__{celltype}/{dataset}__{celltype}_genes.csv"
+        coexpr="subtype_results/{dataset}__{celltype}/{dataset}__{celltype}_coexpr.csv",pvals="subtype_results/{dataset}__{celltype}/{dataset}__{celltype}_pvals.csv",genes="subtype_results/{dataset}__{celltype}/{dataset}__{celltype}_genes.csv"
     output:
-        modules="results/{dataset}__{celltype}/modules/modules.csv"
+        modules="subtype_results/{dataset}__{celltype}/modules/modules.csv"
     threads: 4
     conda:
         "envs/wgcnago_env.yaml"
     shell:
         """
-        Rscript wgcna_go.R {input.coexpr} {input.pvals} {input.genes} results/{wildcards.dataset}__{wildcards.celltype}/modules
+        Rscript wgcna_go.R {input.coexpr} {input.pvals} {input.genes} subtype_results/{wildcards.dataset}__{wildcards.celltype}/modules
         """
 
 rule individual_matrix_exp:
     input:
-        adata=lambda wildcards: datasets[wildcards.dataset], modules="results/{dataset}__{celltype}/modules/modules.csv"
+        adata=lambda wildcards: datasets[wildcards.dataset], modules="subtype_results/{dataset}__{celltype}/modules/modules.csv"
     output:
-        matrix="results/{dataset}__{celltype}/{dataset}__{celltype}_individualmatrix.csv"
+        matrix="subtype_results/{dataset}__{celltype}/{dataset}__{celltype}_individualmatrix.csv"
     threads: 4
     params:
-        celltype_col="Celltype_Class"
+        celltype_col="unified_subtype" #celltype_col="Celltype_Class"
     conda:
         "envs/cscore_env.yaml"
     shell:
@@ -59,10 +67,10 @@ rule individual_matrix_exp:
 
 rule module_distributions:
     input:
-        modules="results/{dataset}__{celltype}/modules/modules.csv", de_folder=DE_BASE_DIR
+        modules="subtype_results/{dataset}__{celltype}/modules/modules.csv", de_folder=DE_BASE_DIR
     output:
-        ks="results/{dataset}__{celltype}/module_geneexp_dist/{dataset}_KSstats.csv", avg_logfc="results/{dataset}__{celltype}/module_geneexp_dist/{dataset}_module_avg_abslogFC.csv"
-    threads: 8
+        ks="subtype_results/{dataset}__{celltype}/module_geneexp_dist/{dataset}_KSstats.csv", avg_logfc="subtype_results/{dataset}__{celltype}/module_geneexp_dist/{dataset}_module_avg_abslogFC.csv"
+    threads: 4
     params:
         number_dist=100
     conda:
@@ -74,10 +82,10 @@ rule module_distributions:
 
 rule DEG_module_association:
     input:
-        modules="results/{dataset}__{celltype}/modules/modules.csv", de_folder=DE_BASE_DIR, background_genes=FULL_GENE_LIST
+        modules="subtype_results/{dataset}__{celltype}/modules/modules.csv", de_folder=DE_BASE_DIR, background_genes=FULL_GENE_LIST
     output:
-        fisher="results/{dataset}__{celltype}/DEG_mod_association/{dataset}_fisherstats.csv"
-    threads: 8
+        fisher="subtype_results/{dataset}__{celltype}/DEG_mod_association/{dataset}_fisherstats.csv"
+    threads: 4
     params:
         deg_cutoff=0.05
     conda:
@@ -91,10 +99,10 @@ rule run_liana:
     input:
         adata=lambda wildcards: datasets[wildcards.dataset]
     output:
-        liana_csv="results/comparisons/{dataset}_liana.csv"
+        liana_csv="subtype_results/comparisons/{dataset}_liana.csv"
     threads: 1
     params:
-        celltype_col="Celltype_Class"
+        celltype_col="unified_subtype"
     conda:
         "envs/liana_env.yaml"
     shell:
@@ -104,12 +112,13 @@ rule run_liana:
 
 rule compare_modules:
     input:
-        liana_csv="results/{dataset}_liana.csv"
+        liana_csv="subtype_results/comparisons/{dataset}_liana.csv"
     output:
-        all_celltype_mods='results/comparisons/{dataset}/{dataset}_allmodules.csv', correlation_df='results/comparisons/{dataset}/{dataset}_module_correlation.csv'
-    threads: 4
+        all_celltype_mods='subtype_results/comparisons/{dataset}/{dataset}_allmodules.csv', correlation_df='subtype_results/comparisons/{dataset}/{dataset}_module_correlation.csv'
+    threads: 2
     params:
-        celltype_list="Oligodendrocytes Microglia OPCs_COPs Astrocytes Excitatory_neurons Vascular_Cells Inhibitory_neurons"
+        celltype_list="Oli_OPALIN Exc_L4-5_RORB_IL1RAPL2 Oli_RASGRF1 Exc_L3-4_RORB_CUX2 Inh_ALCAM_TRPM3 Ast_GRM3 Exc_L3-5_RORB_PLCH1 Exc_L2-3_CBLN2_LINC02306 Exc_L6b Exc_L6_THEMIS_NFIA Mic_P2RY12 Ast_DPP10 OPC_DOCK5 Exc_L4-5_RORB_GABRG1 Inh_VIP_TSHZ2 Inh_L5-6_PVALB_STON2 Inh_PVALB_HTR4 Exc_L5-6_NP Inh_PVALB_SULF1 Inh_LAMP5_NRG1_Rosehip Opc_GRIA4 Inh_CUX2_MSR1 Exc_RELN_CHD7 Inh_VIP_ABI3BP Exc_L5-6_RORB_LINC02196 Exc_NRGN Exc_L6_CT Inh_RYR3_TSHZ2 Inh_L3-5_SST_MAFB capEndo Inh_PVALB_CA8_Chandelier Inh_FBN2_EPB41L4A Inh_VIP_CLSTN2 Mic_DUSP1 Inh_L1-6_LAMP5_CA13 Exc_L5-6_IT_Car3 Inh_SGCD_PDE3A Inh_ENOX2_SPHKAP Inh_L1_PAX6_CA4 aSMC Inh_SORCS1_TTN Inh_GPC5_RIT2 Inh_LAMP5_RELN Inh_L6_SST_NPY Inh_PTPRK_FAM19A1 Fib2 Inh_VIP_THSD7B Inh_L5-6_SST_TH Inh_L1-2_PAX6_SCGN Fib1 Mic_TPT1 Per1 aEndo Opc_TPST1 CAMs Exc_L5_ET Ast_TPST1 vEndo T_cells Per2 vSMC Mic_MKI67 Fib3"
+        #celltype_list="Oligodendrocytes Microglia OPCs_COPs Astrocytes Excitatory_neurons Vascular_Cells Inhibitory_neurons"
     conda:
         "envs/python_stats.yaml"
     shell:
@@ -119,9 +128,9 @@ rule compare_modules:
 
 rule annotate_lr_in_comparisons:
     input:
-        all_celltype_mods='results/comparisons/{dataset}/{dataset}_allmodules.csv', correlation_df='results/comparisons/{dataset}/{dataset}_module_correlation.csv', liana_csv="results/comparisons/{dataset}_liana.csv"
+        all_celltype_mods='subtype_results/comparisons/{dataset}/{dataset}_allmodules.csv', correlation_df='subtype_results/comparisons/{dataset}/{dataset}_module_correlation.csv', liana_csv="subtype_results/comparisons/{dataset}_liana.csv"
     output:
-        annotated_lr='results/comparisons/{dataset}/{dataset}_sig_correlations_annotated.csv'
+        annotated_lr='subtype_results/comparisons/{dataset}/{dataset}_sig_correlations_annotated.csv'
     threads: 4
     conda:
         "envs/liana_env.yaml"
@@ -132,13 +141,28 @@ rule annotate_lr_in_comparisons:
 
 rule across_disease_comparisons:
     input:
-        annotated=expand('results/comparisons/{dataset}/{dataset}_sig_correlations_annotated.csv', dataset=datasets)
+        annotated=expand('subtype_results/comparisons/{dataset}/{dataset}_sig_correlations_annotated.csv', dataset=datasets)
     output:
-        combined_comparisons='results/comparisons/datasets_compared.csv', excel_outfile='results/comparisons/datasets_comparisoncounts.xlsx'
+        combined_comparisons='subtype_results/comparisons/datasets_compared.csv', excel_outfile='subtype_results/comparisons/datasets_comparisoncounts.xlsx'
     threads: 1
     conda:
         "envs/plotting_env.yaml"
     shell:
         """
         python comparing_datasets.py --annotated_csvs {input.annotated} --outfile {output.combined_comparisons} --excel_outfile {output.excel_outfile}
+        """
+
+rule chord_diagrams:
+    input:
+        annotated=expand('subtype_results/comparisons/{dataset}/{dataset}_sig_corelations_annotated.csv', dataset=datasets)
+    output:
+        pdf_plot='subtype_results/comparisons/{dataset}/{dataset}_sig_lr_celltype_chordplot.pdf', png_plot='subtype_results/comparisons/{dataset}/{dataset}_sig_lr_celltype_chordplot.png'
+    threads: 6
+    params:
+        celltype_col='unified_subtype'
+    conda: 
+        'envs/circos_r_env.yaml'
+    shell:
+        """
+        Rscript chord_diagrams.R {input.annotated} {wildcards.dataset} {params.celltype_col} {output.pdf_plot} {output.png_plot}
         """

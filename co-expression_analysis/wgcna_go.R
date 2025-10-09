@@ -14,6 +14,22 @@ if (!dir.exists(output_dir)) dir.create(output_dir, recursive=TRUE)
 coexpr <- as.matrix(read.csv(coexpr_path, header=FALSE))
 pvals  <- as.matrix(read.csv(pval_path,  header=FALSE))
 genes_selected <- readLines(genes_path)
+
+if (length(genes_selected) == 0 || nrow(coexpr) == 0 || nrow(pvals) == 0) {
+  warning("Empty CSCORE output detected. Writing empty placeholder files.")
+  write.csv(data.frame(gene=character(0), module=integer(0)),
+            file.path(output_dir, "modules.csv"), row.names=FALSE)
+  go_headers <- c("ID", "Description", "GeneRatio", "BgRatio", "pvalue",
+                  "p.adjust", "qvalue", "geneID", "Count")
+  for (i in 1:1) {  #at least one placeholder
+    write.csv(as.data.frame(matrix(ncol=length(go_headers), nrow=0,
+                                   dimnames=list(NULL, go_headers))),
+              file.path(output_dir, paste0("module", i, "_GO.csv")),
+              row.names=FALSE)
+  }
+  quit(save="no")
+}
+
 rownames(coexpr) <- colnames(coexpr) <- genes_selected
 rownames(pvals)  <- colnames(pvals)  <- genes_selected
 
