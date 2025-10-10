@@ -9,6 +9,7 @@ parser.add_argument("--correlation_df", required=True)
 parser.add_argument("--liana_csv", required=True)
 parser.add_argument("--dataset", required=True)
 parser.add_argument("--outfile", required=True)
+parser.add_argument("--current_results_folder", required=True)
 args=parser.parse_args()
 
 correlations=pd.read_csv(args.correlation_df)
@@ -40,7 +41,7 @@ module2genes={}
 all_modules=pd.concat([sig_correlations['module1'],sig_correlations['module2']])
 modcelltypes=sorted(set([x.rsplit("_", 1)[0] for x in all_modules.unique()]))
 for celltype in modcelltypes:
-    module_genes=pd.read_csv(f'results/{args.dataset}__{celltype}/modules/modules.csv')
+    module_genes=pd.read_csv(f'{args.current_results_folder}{args.dataset}__{celltype}/modules/modules.csv')
     module_genes_dict=(module_genes.groupby("module")["gene"].apply(list).to_dict())
     module_genes_dict={f"{celltype}_{k}": v for k, v in module_genes_dict.items()}
     module2genes=module2genes | module_genes_dict

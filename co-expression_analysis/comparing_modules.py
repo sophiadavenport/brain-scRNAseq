@@ -12,6 +12,7 @@ parser.add_argument("--dataset", required=True)
 parser.add_argument("--celltype_list", nargs="+", required=True)
 parser.add_argument("--correlation_df_path", required=True)
 parser.add_argument("--all_celltype_modules_path", required=True)
+parser.add_argument("--current_results_folder", required=True)
 args = parser.parse_args()
 
 dataset=args.dataset
@@ -20,18 +21,18 @@ celltypes=args.celltype_list
 all_celltype_modules=[]
 indv_exp=[]
 for celltype in celltypes:
-    indv_mod_exp=pd.read_csv('results/'+dataset+'__'+celltype+'/'+dataset+'__'+celltype+"_individualmatrix.csv")
+    indv_mod_exp=pd.read_csv(args.current_results_folder+dataset+'__'+celltype+'/'+dataset+'__'+celltype+"_individualmatrix.csv")
     indv_mod_exp['module']=celltype+'_'+indv_mod_exp['Unnamed: 0'].astype(str)
     indv_mod_exp=indv_mod_exp.set_index('module').drop('Unnamed: 0', axis=1)    
     indv_exp.append(indv_mod_exp)
     try:
-        ks_stats=pd.read_csv('results/'+dataset+'__'+celltype+'/module_geneexp_dist/'+dataset+'_KSstats.csv')
+        ks_stats=pd.read_csv(args.current_results_folder+dataset+'__'+celltype+'/module_geneexp_dist/'+dataset+'_KSstats.csv')
         ks_stats['module']=celltype+'_'+ks_stats['module'].astype(str)
         ks_stats=ks_stats.rename(columns={'confidence': 'ks_confidence'})
         ks_stats=ks_stats[['module', 'median_ks_pval', 'ks_confidence']]
     except:
         print('no KS stats:', dataset, celltype)
-    fisher=pd.read_csv('results/'+dataset+'__'+celltype+'/DEG_mod_association/'+dataset+'_fisherstats.csv')
+    fisher=pd.read_csv(args.current_results_folder+dataset+'__'+celltype+'/DEG_mod_association/'+dataset+'_fisherstats.csv')
     fisher['module']=celltype+'_'+fisher['module'].astype(str)
     fisher=fisher.rename(columns={'p_adj': 'fisher_p_adj', 'odds_ratio': 'fisher_odds_ratio'})
     fisher=fisher[['module', 'fisher_odds_ratio', 'fisher_p_adj']]
