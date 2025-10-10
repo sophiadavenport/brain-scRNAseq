@@ -12,6 +12,7 @@ parser.add_argument("--de_folder", required=True)
 parser.add_argument("--fisher_csv_path", required=True)
 parser.add_argument("--deg_cutoff", type=float, required=True)
 parser.add_argument("--background_genes", required=True)
+parser.add_argument("--celltype_folder_name", required=True)
 args = parser.parse_args()
 
 def fishers_enrichment_per_module(modules_df, background_genes_set, deg_df, celltype, deg_cutoff):
@@ -33,11 +34,15 @@ def fishers_enrichment_per_module(modules_df, background_genes_set, deg_df, cell
         oddsratio, p_value=fisher_exact(table, alternative='greater') 
         results.append({'celltype':celltype,'module': module,'overlap': a,'odds_ratio': oddsratio,'p_value': p_value})
     results_df=pd.DataFrame(results)
-    results_df['p_adj']=multipletests(results_df['p_value'], method='fdr_bh')[1]
+    try:
+        if results_df.empty or results_df['p_value'].isnull().all():
+            raise ValueError("No valid p-values to adjust.")
+        results_df['p_adj']=multipletests(results_df['p_value'], method='fdr_bh')[1]
+    except Exception as e:
+        print(f"{celltype}: Skipping p-value adjustment — {e}")
     return(results_df)
 
-#de_csv_path=f"{args.de_folder}/{args.dataset}_DEG/results/{args.dataset}_celltypeclass__{args.celltype}_edger_results.csv"
-de_csv_path=f"{args.de_folder}/{args.dataset}_DEG/results/{args.dataset}_celltype__{args.celltype}_edger_results.csv"
+de_csv_path=f"{args.de_folder}/{args.dataset}_DEG/results/{args.dataset}_{args.celltype_folder_name}__{args.celltype}_edger_results.csv"
 deg_df=pd.read_csv(de_csv_path)
 background_genes_set=set(pd.read_csv(args.background_genes)['gene'])
 modules_df=pd.read_csv(args.modules_csv_path)
