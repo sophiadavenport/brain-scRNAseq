@@ -11,11 +11,26 @@ output_dir <- args[4]
 
 if (!dir.exists(output_dir)) dir.create(output_dir, recursive=TRUE)
 
-coexpr <- as.matrix(read.csv(coexpr_path, header=FALSE))
-pvals  <- as.matrix(read.csv(pval_path,  header=FALSE))
-genes_selected <- readLines(genes_path)
-
-if (length(genes_selected) == 0 || nrow(coexpr) == 0 || nrow(pvals) == 0) {
+coexpr<-tryCatch({
+  as.matrix(read.csv(coexpr_path, header=FALSE))
+  }, error = function(e) {
+    warning(paste("Error reading coexpr file:", coexpr_path, "->", e$message))
+    matrix(nrow = 0, ncol = 0)
+    })
+pvals<-tryCatch({
+  as.matrix(read.csv(pval_path, header = FALSE))
+  }, error = function(e) {
+    warning(paste("Error reading pvals file:", pval_path, "->", e$message))
+    matrix(nrow = 0, ncol = 0)
+    })
+genes_selected<-tryCatch({
+  readLines(genes_path)
+  }, error = function(e) {
+    warning(paste("Error reading genes file:", genes_path, "->", e$message))
+    character(0)
+    })
+    
+if (length(genes_selected)==0 || nrow(coexpr)==0 || nrow(pvals)==0) {
   warning("Empty CSCORE output detected. Writing empty placeholder files.")
   write.csv(data.frame(gene=character(0), module=integer(0)),
             file.path(output_dir, "modules.csv"), row.names=FALSE)
@@ -55,7 +70,7 @@ names(memb) <- genes_selected
 module_df <- data.frame(gene=genes_selected, module=memb)
 write.csv(module_df, file.path(output_dir, "modules.csv"), row.names=FALSE)
 
-module_list <- lapply(sort(unique(memb[memb > 0])), function(k) names(which(memb == k)))
+module_list <- lapply(sort(unique(memb[memb > 0])), function(k) names(which(memb==k)))
 
 universe <- genes_selected
 
