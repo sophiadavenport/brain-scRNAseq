@@ -39,11 +39,17 @@ def get_individuallevel_module_exp(adata, module_df):
     
     return(matrix)
 
-adata=sc.read_h5ad(args.adata)
+# adata=sc.read_h5ad(args.adata)
 
-adata.obs["Celltype_clean"]=adata.obs[args.celltype_col].astype(str).str.replace(r" \+ ", "_", regex=True).str.replace(r" ", "_", regex=True).str.replace(r"\(", "", regex=True).str.replace(r"\)", "", regex=True).str.replace("/", "-")
+# adata.obs["Celltype_clean"]=adata.obs[args.celltype_col].astype(str).str.replace(r" \+ ", "_", regex=True).str.replace(r" ", "_", regex=True).str.replace(r"\(", "", regex=True).str.replace(r"\)", "", regex=True).str.replace("/", "-")
 
-cell_adata=adata[adata.obs["Celltype_clean"]==args.current_celltype, :]
+# cell_adata=adata[adata.obs["Celltype_clean"]==args.current_celltype, :]
+adata=sc.read_h5ad(args.adata, backed='r')
+obs=adata.obs.copy()
+obs["Celltype_clean"]=(obs[args.celltype_col].astype(str).astype(str).str.replace(r" \+ ", "_", regex=True).str.replace(r" ", "_", regex=True).str.replace(r"\(", "", regex=True).str.replace(r"\)", "", regex=True).str.replace("/", "-"))
+cell_indices=obs.index[obs["Celltype_clean"] == args.current_celltype]
+subset=adata[cell_indices, :]
+cell_adata=subset.to_memory()
 
 if cell_adata.n_obs < 100:
     print(f"Warning: Only {cell_adata.n_obs} cells for {args.current_celltype}. Writing empty matrix.")

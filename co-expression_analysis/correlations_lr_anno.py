@@ -45,6 +45,7 @@ for celltype in modcelltypes:
     module_genes_dict=(module_genes.groupby("module")["gene"].apply(list).to_dict())
     module_genes_dict={f"{celltype}_{k}": v for k, v in module_genes_dict.items()}
     module2genes=module2genes | module_genes_dict
+    # module2genes.update(module_genes_dict)
 
 results=[]
 

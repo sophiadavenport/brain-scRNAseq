@@ -15,9 +15,10 @@ parser.add_argument("--de_folder", required=True)
 parser.add_argument("--ks_csv_path", required=True)
 parser.add_argument("--avg_logfc_csv_path", required=True)
 parser.add_argument("--number_dist", type=int, required=True)
+parser.add_argument("--DE_cellpath", required=True)
 args = parser.parse_args()
 
-de_csv_path=f"{args.de_folder}/{args.dataset}_DEG/results/{args.dataset}_celltypeclass__{args.celltype}_edger_results.csv"
+de_csv_path=f"{args.de_folder}/{args.dataset}_DEG/results/{args.dataset}_{args.DE_cellpath}__{args.celltype}_edger_results.csv"
 
 def logfc_distribution_per_module(celltype, dataset, modules_csv_path, de_csv_path, ks_csv_path, avg_logfc_csv_path, number_dist=50):
     #requires: scipy.stats as stats, os, matplotlib as plt, seaborn as sns, numpy as np, and pandas as pd

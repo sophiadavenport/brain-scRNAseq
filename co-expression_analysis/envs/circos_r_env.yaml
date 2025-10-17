@@ -1,0 +1,12 @@
+name: circos_r_env
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - r-base=4.2
+  - r-ccplotr
+  - r-dplyr
+  - r-stringr
+  - r-circlize
+  - r-ggplot2
