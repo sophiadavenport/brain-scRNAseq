@@ -16,7 +16,7 @@ ASD_H5AD=config["ASD_h5ad"]
 
 rule all:
     input:
-        "results/ADASDBDMSSZ_full_unified_celltype_umap.png", "results/common_gene_list.csv", "results/annotations_qc_report.txt", f"{OUTPUT_PATH}/ADASDBDMSSZ_full_processed.h5ad"
+        "results/ADASDBDMSSZ_full_unified_celltype_umap.png", "results/common_gene_list.csv", "results/annotations_qc_report.txt", f"{OUTPUT_PATH}/ADASDBDMSSZ_processed.h5ad"
 
 rule filter_BD_SZ: #BD and SZ data must be filtered first since they have overlapping cells
     input:
@@ -72,7 +72,7 @@ rule redo_clustering:
     input:
         joined_adata=f"{OUTPUT_PATH}/ADASDBDMSSZ_full.h5ad"
     output:
-        joined_outfile=f"{OUTPUT_PATH}/ADASDBDMSSZ_full_processed.h5ad"
+        joined_outfile=f"{OUTPUT_PATH}/ADASDBDMSSZ_processed.h5ad"
     conda:
         "envs/scanpy.yaml"
     shell:
@@ -82,7 +82,7 @@ rule redo_clustering:
 
 rule umaps:
     input:
-        joined_adata=f"{OUTPUT_PATH}/ADASDBDMSSZ_full_processed.h5ad"
+        joined_adata=f"{OUTPUT_PATH}/ADASDBDMSSZ_processed.h5ad"
     output:
         celltype_umap_tracked="results/ADASDBDMSSZ_full_unified_celltype_umap.png"
     conda:
