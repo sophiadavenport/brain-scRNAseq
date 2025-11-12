@@ -272,4 +272,3 @@ dependencies:
   - zeromq=4.3.5=h6a678d5_0
   - zstandard=0.23.0=py313h536fd9c_1
   - zstd=1.5.7=hb8e6e7a_1
-prefix: /lab/solexa_sun/lab_members/sdavenport/miniforge3/envs/TACCO_env
