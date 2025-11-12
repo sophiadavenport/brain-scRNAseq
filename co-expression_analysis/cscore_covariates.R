@@ -85,11 +85,11 @@ valid_covariates <- get_valid_covariates(seurat_obj)
 
 res <- CSCORE(seurat_obj, genes=expressed_genes, covariate_names=valid_covariates)
 
-coexpr_mat <- CSCORE_result_adj$coexpr_mat
-pval_mat <- CSCORE_result_adj$pval_mat
-teststat_mat <- CSCORE_result_adj$teststat_mat
+coexpr_mat <- res$coexpr_mat
+pval_mat <- res$pval_mat
+teststat_mat <- res$teststat_mat
 
-write.csv(as.matrix(CSCORE_result_adj$coexpr_mat), coexpr_output, row.names=TRUE)
+write.csv(as.matrix(coexpr_mat), coexpr_output, row.names=TRUE)
 write.csv(as.matrix(pval_mat), teststats_output, row.names=TRUE)
 write.csv(as.matrix(teststat_mat), p_vals_output, row.names=TRUE)
 write.table(expressed_genes, selected_genes_output, row.names=FALSE, col.names=FALSE, quote=FALSE, sep=",")
