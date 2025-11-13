@@ -14,11 +14,20 @@ output_sig_genes <- args[3]
 
 results <- read.csv(edger_res)
 
+if (nrow(results)==0) {
+  message("No rows in results")
+  saveRDS(NULL, output_rds)
+  write.csv(data.frame(), output_sig_genes, row.names = FALSE)
+  quit(save="no", status=0)
+}
+
 results <- results |>
   dplyr::rename(
     log2FoldChange=logFC,
     pvalue=PValue
   )
+results$F <- suppressWarnings(as.numeric(results$F))
+results$F[is.na(results$F) | results$F < 0] <- 0 #ensure no NANs produced in lfcSE
 results$lfcSE <- 1 / sqrt(results$F + 1e-8)  #crude proxy from F statistic since edgeR doesn't give lfcSE
 
 
