@@ -412,11 +412,11 @@ def plot_celltype_bar(adata, x_col, save_string, colorby=None, percent_true=Fals
     plt.tight_layout()
     plt.figsave(save_string)
 
-def set_celltype_colors(adata, celltype_class_col=None, celltype_subtype_col=None):
+def set_celltype_colors(adata=None, celltype_class_col=None, celltype_subtype_col=None, broad=False):
     '''
     Used to make colors consistent for subtypes and celltypes across datasets
     '''
-    broad_colors = {
+    broad_colors={
         'Excitatory neurons':'#006d2c', #deep green
         'OPCs + COPs': '#8c510a', #brown
         'Vascular Cells': '#bebada', #purple
@@ -425,7 +425,7 @@ def set_celltype_colors(adata, celltype_class_col=None, celltype_subtype_col=Non
         'Oligodendrocytes': '#f781bf', #soft pink
         'Microglia': '#e41a1c' #red
         }
-    subtype_colors = {
+    subtype_colors={
         #Excitatory neurons (green)
         'Exc L2-3 CBLN2 LINC02306': "#00441b",'Exc L3-4 RORB CUX2': "#006d2c",'Exc L3-5 RORB PLCH1': "#238b45",'Exc L4-5 RORB GABRG1': "#41ab5d",'Exc L4-5 RORB IL1RAPL2': "#74c476",'Exc L5 ET': "#a1d99b",
         'Exc L5/6 IT Car3': "#c7e9c0",'Exc L5/6 NP': "#2ca25f",'Exc L5-6 RORB LINC02196': "#66c2a4",'Exc L6 CT': "#99d8c9",'Exc L6 THEMIS NFIA': "#ccece6",'Exc L6b': "#5aae61",'Exc NRGN': "#1b7837",'Exc RELN CHD7': "#d9f0d3",
@@ -448,6 +448,11 @@ def set_celltype_colors(adata, celltype_class_col=None, celltype_subtype_col=Non
         #NA (black)
         'NA': "#000000"
         }
+    if adata==None:
+        if broad==False:
+            return(subtype_colors)
+        else:
+            return(broad_colors)
     if celltype_class_col:
         colors=[broad_colors[cat] for cat in adata.obs[celltype_class_col].cat.categories]
         uns_classname=f"{celltype_class_col}_colors"
@@ -456,4 +461,103 @@ def set_celltype_colors(adata, celltype_class_col=None, celltype_subtype_col=Non
         colors=[subtype_colors[cat] for cat in adata.obs[celltype_subtype_col].cat.categories]
         uns_subname=f"{celltype_subtype_col}_colors"
         adata.uns[uns_subname]=colors
+    return(adata)
+
+def reorder_subtypes(celltypes):
+    '''
+    Used to define subtypes in priority order for graphing
+    '''
+    groups=[['exc'],['inh'],['ast'],['opc'], ['oli'],['mic', 'mg', 't cells'],['vas', 'endo', 'peri']]
+    
+    def get_priority(item):
+        item_lower=item.lower()
+        for i, keywords in enumerate(groups):
+            if any(k in item_lower for k in keywords):
+                return i
+        return len(groups)
+
+    sorted_list=sorted(celltypes, key=lambda x: (get_priority(x), x.lower()))
+    return sorted_list
+
+def basic_preprocess(adata, batch_col=None, scrub=None, human=True):
+    '''
+    Used to perform basic preprocessing of singlecell data from h5ad format.
+    '''
+    print('pre-filtering steps shape: ', adata.shape, "\n")
+    if human==True:
+        adata.var["mt"]=adata.var_names.str.startswith("MT-") #human mitochondrial genes specified
+        adata.var["ribo"]=adata.var_names.str.startswith(("RPS", "RPL"))
+        adata.var["hb"]=adata.var_names.str.contains("^HB[^(P)]")
+    else:
+        adata.var["mt"]=adata.var_names.str.startswith("mt-") #human mitochondrial genes specified
+        adata.var["ribo"]=adata.var_names.str.startswith(("Rps", "Rpl"))
+        adata.var["hb"]=adata.var_names.str.contains("^Hb[ab]")
+        
+    sc.pp.calculate_qc_metrics(adata, qc_vars=["mt", "ribo", "hb"], inplace=True, log1p=True)
+    
+    sc.pp.filter_cells(adata, min_genes=100)
+    sc.pp.filter_genes(adata, min_cells=3)
+    print('number of cells with greater than 10% mitochondrial genes',len(adata[(adata.obs.pct_counts_mt > 10)]), "\n")
+    adata=adata[(adata.obs.pct_counts_mt < 10)] #filtering out cells with greater than 10% mitochondrial genes
+    #Ensuring that batch is category type
+    if batch_col:
+        if adata.obs[batch_col].dtype.name != 'category':
+            adata.obs[batch_col]=adata.obs[batch_col].apply(lambda x: f'Batch{x}' if adata.obs[batch_col].dtype.name != 'category' else x).astype('category')
+    #scrublet...
+    if scrub:
+        print('starting scrublet analysis')
+        print('pre-scrublet adata shape: ', adata.shape, "\n")
+        if batch_col:
+            try:
+                sc.pp.scrublet(adata, batch_key=batch_col)
+                predicted_doublet_idx=list(adata[adata.obs.predicted_doublet==True].obs.index)
+                print(len(predicted_doublet_idx), " number of doublets predicted across the dataset ","\n")
+                if len(predicted_doublet_idx) > 0:
+                    adata=adata[~adata.obs.index.isin(predicted_doublet_idx)] #filtering cells in predicted doublet index list out of adata object
+                    print('doublets removed from', 'new shape: ', adata.shape, "\n")
+                else:
+                    print('no doublets to remove from', "\n")
+            except Exception as e:
+                print('scrublet with batch but without batch separation failed for ', "\n")
+                print(f'Error: {str(e)}', "\n")
+                batch_ids=adata.obs[batch_col].unique()
+                predicted_doublet_idx=[]
+                for batch in batch_ids:
+                    print("scrubbing batch: ", batch)
+                    adata_batch=adata[adata.obs["batch"] == batch]
+                    sc.pp.scrublet(adata_batch) #performing scrublet on individual batches #may need to look at adjusting number of principal components later
+                    predicted_doublet_idx.append(list(adata_batch[adata_batch.obs.predicted_doublet == True].obs.index)) #pulling a list of cell where predicted_doublet is true and adding this to the list of predicted doublet cells for the entire batch
+    
+                flat_predicted_doublet_idx=[cell_id for batch in predicted_doublet_idx for cell_id in batch]
+                print(len(flat_predicted_doublet_idx), ": number of doublets predicted across the dataset ", "\n")     
+                if len(flat_predicted_doublet_idx) > 0:
+                    print('Done with scrublet, starting filter out of doublets \n')
+                    adata=adata[~adata.obs.index.isin(flat_predicted_doublet_idx)] #filtering cells in predicted doublet index list out of adata object
+                    print('done filtering of doublets from adata ', "\n")
+                else: #no cells to filter out so continue
+                    print('No predicted doublets. Adata shape: ', adata.shape, "\n")
+        else: #batch being None
+            sc.pp.scrublet(adata)
+            predicted_doublet_idx=list(adata[adata.obs.predicted_doublet==True].obs.index)
+            print(len(predicted_doublet_idx), " number of doublets predicted across the dataset ", '\n')
+            adata=adata[~adata.obs.index.isin(predicted_doublet_idx)] #filtering cells in predicted doublet index list out of adata object
+            print('done filtering of doublets from adata ')
+        print('adata shape after scrublet: ', adata.shape, '\n')
+    #normalize data...
+    if adata.X.max()<20:
+        print('Already logged and normalized counts \n')
+    else:
+        print(adata, 'normalizing and log transforming... \n')
+        adata.layers["counts"]=adata.X.copy()
+        sc.pp.normalize_total(adata)
+        sc.pp.log1p(adata)
+    #HV genes
+    if batch_col:
+        sc.pp.highly_variable_genes(adata, n_top_genes=2000, batch_key=batch_col)
+    else:
+        sc.pp.highly_variable_genes(adata, n_top_genes=2000)
+    #clustering
+    sc.tl.pca(adata)
+    sc.pp.neighbors(adata)
+    sc.tl.umap(adata)
     return(adata)
