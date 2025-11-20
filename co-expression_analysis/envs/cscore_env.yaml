@@ -8,6 +8,3 @@ dependencies:
   - anndata
   - pandas
   - numpy
-  - pip
-  - pip:
-      - -e /lab/solexa_sun/lab_members/sdavenport/scRNAseq/brain/co-expression_analysis/CS-CORE_python
