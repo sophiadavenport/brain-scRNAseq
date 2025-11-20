@@ -1,3 +1,9 @@
+library(devtools)
+
+if (!requireNamespace("CSCORE", quietly = TRUE)) {
+  remotes::install_github("ChangSuBiostats/CS-CORE")
+}
+
 suppressPackageStartupMessages({
     library(CSCORE)
     library(Seurat)
