@@ -16,7 +16,8 @@ teststats_output <- args[7]
 p_vals_output <- args[8]
 selected_genes_output <- args [9]
 
-counts_mat <- t(readMM(counts))
+counts_mat <- readMM(counts)
+counts_mat <- t(counts_mat)
 gene_names <- read.table(genes, header=FALSE, stringsAsFactors=FALSE)[,1]
 barcode_names <- read.table(barcodes, header=FALSE, stringsAsFactors=FALSE)[,1]
 rownames(counts_mat) <- gene_names
@@ -85,11 +86,16 @@ valid_covariates <- get_valid_covariates(seurat_obj)
 
 res <- CSCORE(seurat_obj, genes=expressed_genes, covariate_names=valid_covariates)
 
-coexpr_mat <- res$coexpr_mat
-pval_mat <- res$pval_mat
-teststat_mat <- res$teststat_mat
+coexpr_mat <- res$est
+pval_mat <- res$p_value
+teststat_mat <- res$test_stat
+
+outdir <- dirname(coexpr_output)
+if (!dir.exists(outdir)) {
+    dir.create(outdir, recursive=TRUE)
+}
 
 write.csv(as.matrix(coexpr_mat), coexpr_output, row.names=TRUE)
-write.csv(as.matrix(pval_mat), teststats_output, row.names=TRUE)
-write.csv(as.matrix(teststat_mat), p_vals_output, row.names=TRUE)
+write.csv(as.matrix(pval_mat), pval_mat, row.names=TRUE)
+write.csv(as.matrix(teststat_mat), teststat_mat, row.names=TRUE)
 write.table(expressed_genes, selected_genes_output, row.names=FALSE, col.names=FALSE, quote=FALSE, sep=",")
