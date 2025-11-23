@@ -102,6 +102,6 @@ if (!dir.exists(outdir)) {
 }
 
 write.csv(as.matrix(coexpr_mat), coexpr_output, row.names=TRUE)
-write.csv(as.matrix(pval_mat), pval_mat, row.names=TRUE)
-write.csv(as.matrix(teststat_mat), teststat_mat, row.names=TRUE)
+write.csv(as.matrix(pval_mat), p_vals_output, row.names=TRUE)
+write.csv(as.matrix(teststat_mat), teststats_output, row.names=TRUE)
 write.table(expressed_genes, selected_genes_output, row.names=FALSE, col.names=FALSE, quote=FALSE, sep=",")
