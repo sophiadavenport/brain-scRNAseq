@@ -24,10 +24,30 @@ selected_genes_output <- args [9]
 
 counts_mat <- readMM(counts)
 counts_mat <- t(counts_mat)
+if (sum(counts_mat)==0){
+  cat("counts matrix is empty (all 0). Write empty output...")
+  outdir <- dirname(coexpr_output)
+    if (!dir.exists(outdir)) {
+        dir.create(outdir, recursive = TRUE)
+    }
+  write.csv(data.frame(), coexpr_output, row.names = FALSE)
+    write.csv(data.frame(), teststats_output, row.names = FALSE)
+    write.csv(data.frame(), p_vals_output, row.names = FALSE)
+    write.table(character(), selected_genes_output, row.names = FALSE, col.names = FALSE, quote = FALSE, sep = ",")
+    quit(save="no")
+}
 gene_names <- read.table(genes, header=FALSE, stringsAsFactors=FALSE)[,1]
 barcode_names <- read.table(barcodes, header=FALSE, stringsAsFactors=FALSE)[,1]
 rownames(counts_mat) <- gene_names
-colnames(counts_mat) <- barcode_names
+tryCatch({
+    colnames(counts_mat) <- barcode_names
+}, error = function(e) {
+    barcode_df <- read.delim(barcodes, header = FALSE, stringsAsFactors = FALSE)
+    barcode_df <- as.character(barcode_df[[1]])
+    barcode_df <- trimws(barcode_df)
+
+    colnames(counts_mat) <<- barcode_df
+})
 
 seurat_obj <- CreateSeuratObject(counts=counts_mat, project=dataset, min.cells=0, min.features=0)
 assay_counts <- GetAssayData(seurat_obj, assay="RNA", layer="counts")
