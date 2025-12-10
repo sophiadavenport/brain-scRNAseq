@@ -1,7 +1,9 @@
-library(WGCNA)
-library(dynamicTreeCut)
-library(clusterProfiler)
-library(org.Hs.eg.db)
+suppressPackageStartupMessages({
+  library(WGCNA)
+  library(dynamicTreeCut)
+  library(clusterProfiler)
+  library(org.Hs.eg.db)
+})
 
 args <- commandArgs(trailingOnly=TRUE)
 coexpr_path <- args[1]
@@ -45,8 +47,46 @@ if (length(genes_selected)==0 || nrow(coexpr)==0 || nrow(pvals)==0) {
   quit(save="no")
 }
 
-rownames(coexpr) <- colnames(coexpr) <- genes_selected
-rownames(pvals)  <- colnames(pvals)  <- genes_selected
+cat("Genes included...", length(genes_selected))
+
+if (dim(coexpr)[1]==length(genes_selected)) { 
+  rownames(coexpr) <- colnames(coexpr) <- genes_selected 
+  } else { 
+    first_row <- coexpr[1,-1] #skip corner 
+    first_col <- coexpr[-1, 1] 
+    if (all(is.na(suppressWarnings(as.numeric(first_row)))) && all(is.na(suppressWarnings(as.numeric(first_col))))) { 
+      col_genes <- coexpr[1,-1] 
+      row_genes <- coexpr[-1, 1] 
+      mat <- coexpr[-1, -1, drop = FALSE] 
+      mat <- apply(mat, 2, function(x) suppressWarnings(as.numeric(x))) 
+      mat <- as.matrix(mat) 
+      rownames(mat) <- row_genes 
+      colnames(mat) <- col_genes 
+      coexpr <- mat 
+      } else { 
+        cat("cannot assign gene names for coexpr") 
+        quit(save="no") 
+        } 
+} 
+if (dim(pvals)[1]==length(genes_selected)) { 
+  rownames(pvals) <- colnames(pvals) <- genes_selected 
+  } else { 
+    first_row <- pvals[1,-1] #skip corner 
+    first_col <- pvals[-1, 1] 
+    if (all(is.na(suppressWarnings(as.numeric(first_row)))) && all(is.na(suppressWarnings(as.numeric(first_col))))) { 
+      col_genes <- pvals[1,-1] #skip corner since is "" 
+      row_genes <- pvals[-1, 1] 
+      mat <- pvals[-1, -1, drop = FALSE] 
+      mat <- apply(mat, 2, function(x) suppressWarnings(as.numeric(x))) 
+      mat <- as.matrix(mat) 
+      rownames(mat) <- row_genes 
+      colnames(mat) <- col_genes 
+      pvals <- mat 
+      } else { 
+        cat("cannot assign gene names for pvals") 
+        quit(save="no") 
+        } 
+}
 
 #Adjust p-values (BH correction)
 p_matrix_BH <- matrix(0, nrow=nrow(pvals), ncol=ncol(pvals))
