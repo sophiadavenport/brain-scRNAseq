@@ -37,7 +37,7 @@ if (sum(counts_mat)==0){
     quit(save="no")
 }
 gene_names <- read.table(genes, header=FALSE, stringsAsFactors=FALSE)[,1]
-barcode_names <- read.table(barcodes, header=FALSE, stringsAsFactors=FALSE)[,1]
+barcode_names <- read.table(barcodes, header=FALSE, stringsAsFactors=FALSE, sep='\t')[,1]
 rownames(counts_mat) <- gene_names
 tryCatch({
     colnames(counts_mat) <- barcode_names
@@ -48,6 +48,8 @@ tryCatch({
 
     colnames(counts_mat) <<- barcode_df
 })
+
+cat("Dimensions of counts (seurat):", dim(counts_mat))
 
 seurat_obj <- CreateSeuratObject(counts=counts_mat, project=dataset, min.cells=0, min.features=0)
 assay_counts <- GetAssayData(seurat_obj, assay="RNA", layer="counts")
