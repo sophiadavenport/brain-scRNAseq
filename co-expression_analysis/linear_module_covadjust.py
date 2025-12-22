@@ -3,7 +3,6 @@ import numpy as np
 import pandas as pd
 import statsmodels.formula.api as smf
 import statsmodels.api as sm
-import anndata as ad
 import argparse
 import sys
 import os
