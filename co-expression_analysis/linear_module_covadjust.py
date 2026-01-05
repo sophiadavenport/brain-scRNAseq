@@ -10,6 +10,7 @@ import os
 parser=argparse.ArgumentParser()
 parser.add_argument("--adata", required=True)
 parser.add_argument("--celltype", required=True)
+parser.add_argument("--celltype_col", required=True)
 parser.add_argument("--indv_matrix", required=True)
 parser.add_argument("--modules_csv_path", required=True)
 parser.add_argument("--output_file", required=True)
@@ -26,14 +27,31 @@ if modules.shape[0]==0:
 indv_matrix=pd.read_csv(args.indv_matrix)
 indv_matrix=indv_matrix.set_index('Unnamed: 0')
 
-if 'individual_id_anon' in adata.obs:
+if 'individual_id_anon' in list(adata.obs.columns):
     indv_col='individual_id_anon'
-elif 'Individual_ID' in adata.obs:
+elif 'Individual_ID' in list(adata.obs.columns):
     indv_col='Individual_ID'
-elif 'individual_id' in adata.obs:
+elif 'individual_id' in list(adata.obs.columns):
     indv_col='individual_id'
+elif 'Individual' in list(adata.obs.columns):
+    indv_col='Individual'
+elif 'individualID' in list(adata.obs.columns):
+    indv_col='individualID'
+else:
+    print('individual column not found')
+    sys.exit(1)
 
 meta=adata.obs[[indv_col, 'Sex', 'Age', 'Condition']].drop_duplicates().reset_index()[[indv_col, 'Sex', 'Age', 'Condition']]
+
+if 'pct_mito' not in list(adata.obs.columns):
+    if 'percent.mt' in list(adata.obs.columns):
+        adata.obs.rename(columns={'percent.mt': 'pct_mito'}, inplace=True)
+    elif 'percent_mt' in list(adata.obs.columns):
+        adata.obs.rename(columns={'percent_mt': 'pct_mito'}, inplace=True)
+    elif 'pct_counts_mt' in list(adata.obs.columns):
+        adata.obs.rename(columns={'pct_counts_mt': 'pct_mito'}, inplace=True)
+    else:
+        print(f'Warning: Could not find mitochondrial column in {args.dataset} for {args.celltype}\n')
 
 avg_pct_mito=(
     adata.obs
@@ -41,7 +59,7 @@ avg_pct_mito=(
       .mean()
       .rename("avg_pct_mito")
 )
-sub_cell=adata[adata.obs['unified_subtype']==args.celltype]
+sub_cell=adata[adata.obs[args.celltype_col]==args.celltype]
 num_cells=sub_cell.obs[indv_col].value_counts().rename('num_cells')
 
 meta=meta.merge(
@@ -94,6 +112,11 @@ def run_module_regression(module_id, module_matrix, meta_df, indv_expr, indv_col
         "ci_high": res.conf_int().loc[cond_term, 1],
         "n": int(res.nobs)
     }
+
+default_formula="module_activity ~ Condition + Age + sex + avg_pct_mito + num_cells"
+
+if "PMI" in list(adata.obs.columns):
+    default_formula=default_formula+" + PMI"
 
 results=[]
 
