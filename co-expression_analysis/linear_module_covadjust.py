@@ -6,7 +6,9 @@ import statsmodels.api as sm
 import argparse
 import sys
 import os
+from statsmodels.stats.multitest import multipletests
 
+#Multivariable linear regression of module activity on condition with covariate adjustment or covariate adjusted linear model
 parser=argparse.ArgumentParser()
 parser.add_argument("--adata", required=True)
 parser.add_argument("--celltype", required=True)
@@ -76,9 +78,7 @@ meta = meta.merge(
 )
 meta['num_cells']=meta['num_cells'].fillna(0)
 
-def run_module_regression(module_id, module_matrix, meta_df, indv_expr, indv_col,
-                          formula="module_activity ~ Condition + Age + sex + avg_pct_mito + num_cells"):
-
+def run_module_regression(module_id, module_matrix, meta_df, indv_expr, indv_col, formula="module_activity ~ Condition + Age + sex + avg_pct_mito + num_cells"):
     indv_z=indv_expr.sub(indv_expr.mean(axis=1), axis=0)
     indv_z=indv_z.div(indv_expr.std(axis=1), axis=0)
 
@@ -117,14 +117,23 @@ default_formula="module_activity ~ Condition + Age + sex + avg_pct_mito + num_ce
 
 if "PMI" in list(adata.obs.columns):
     default_formula=default_formula+" + PMI"
-
+if "batch" in list(adata.obs.columns):
+    default_formula=default_formula+" + batch"
+elif "Batch" in list(adata.obs.columns):
+    default_formula=default_formula+" + batch"
+print(f'Covariate formula used: {default_formula}')
 results=[]
 
 for module_id in indv_matrix.index:
-    out=run_module_regression(module_id=module_id, module_matrix=modules, meta_df=meta, indv_expr=indv_matrix, indv_col=indv_col)
+    out=run_module_regression(module_id=module_id, module_matrix=modules, meta_df=meta, indv_expr=indv_matrix, indv_col=indv_col, formula=default_formula)
     if out is not None:
         results.append(out)
 
 res_df=pd.DataFrame(results)
+if not res_df.empty and "p_value" in res_df.columns: #FDR correction across modules
+    res_df["p_adj"]=multipletests(res_df["p_value"], method="fdr_bh")[1]
+else:
+    print('fdr adjustment for across modules failed')
+    res_df["p_adj"]=[]
 
-res_df.to_csv(args.output_file)
+res_df.to_csv(args.output_file, index=False)
