@@ -43,7 +43,35 @@ else:
     print('individual column not found')
     sys.exit(1)
 
-meta=adata.obs[[indv_col, 'Sex', 'Age', 'Condition']].drop_duplicates().reset_index()[[indv_col, 'Sex', 'Age', 'Condition']]
+if 'pmi_cat' in list(adata.obs.columns):
+    adata.obs.rename(columns={'pmi_cat': 'PMI'}, inplace=True)
+    pmi_col='PMI'
+elif 'PMI' in list(adata.obs.columns):
+    pmi_col='PMI'
+else:
+    pmi_col=None
+
+if 'batch' in list(adata.obs.columns):
+    adata.obs.rename(columns={'batch': 'Batch'}, inplace=True)
+    batch_col='Batch'
+elif 'Batch' in list(adata.obs.columns):
+    batch_col='Batch'
+else:
+    batch_col=None
+
+meta_cols=[indv_col, 'Sex', 'Age', 'Condition']
+default_formula="module_activity ~ Condition + Age + sex + avg_pct_mito + num_cells"
+if pmi_col!=None:
+    meta_cols.append(pmi_col)
+    default_formula=default_formula+" + PMI"
+if batch_col!=None:
+    meta_cols.append(batch_col)
+    default_formula=default_formula+" + C(Batch)" #C() keeps batch as category
+
+meta=adata.obs[meta_cols].drop_duplicates().reset_index()[meta_cols] #indv_col, 'Sex', 'Age', 'Condition'
+if meta[indv_col].duplicated().any():
+    print(f"Warning: {meta[indv_col].duplicated().sum()} duplicate rows found for {indv_col}.") #drops repeats by keeping first
+    meta=meta.drop_duplicates(subset=[indv_col], keep='first').reset_index(drop=True)
 
 if 'pct_mito' not in list(adata.obs.columns):
     if 'percent.mt' in list(adata.obs.columns):
@@ -113,14 +141,6 @@ def run_module_regression(module_id, module_matrix, meta_df, indv_expr, indv_col
         "n": int(res.nobs)
     }
 
-default_formula="module_activity ~ Condition + Age + sex + avg_pct_mito + num_cells"
-
-if "PMI" in list(adata.obs.columns):
-    default_formula=default_formula+" + PMI"
-if "batch" in list(adata.obs.columns):
-    default_formula=default_formula+" + batch"
-elif "Batch" in list(adata.obs.columns):
-    default_formula=default_formula+" + batch"
 print(f'Covariate formula used: {default_formula}')
 results=[]
 
