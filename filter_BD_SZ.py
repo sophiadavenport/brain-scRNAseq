@@ -8,20 +8,14 @@ import argparse
 import pandas as pd
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--BD_counts", required=True)
+parser.add_argument("--BD_adata", required=True)
 parser.add_argument("--SZ_counts", required=True)
-parser.add_argument("--BD_metadata", required=True)
 parser.add_argument("--SZ_metadata", required=True)
-parser.add_argument("--BD_genenames", required=True)
 parser.add_argument("--SZ_genenames", required=True)
 parser.add_argument("--output", required=True)
 args = parser.parse_args()
 
-BD=sh.mtx_to_adata(counts_path=args.BD_counts, 
-                   gene_names_path=args.BD_genenames, 
-                   metadata_path=args.BD_metadata,
-                   genename_col='Unnamed: 0', barcodes_col='Unnamed: 0', 
-                   data_name=None, directory_path=None, raw_counts_path=None, spatial_path=None)
+BD=sc.read_h5ad(args.BD_adata)
 
 SZ=sh.mtx_to_adata(counts_path=args.SZ_counts, 
                    gene_names_path=args.SZ_genenames, 
@@ -37,11 +31,15 @@ for adata in [BD, SZ]:
     if 'Celltype' not in adata.obs.columns: #standardizing celltype column name
         if 'celltype' in adata.obs.columns:
             adata.obs.rename(columns={'celltype': 'Celltype'}, inplace=True)
+        elif 'cell_group' in adata.obs.columns:
+            adata.obs.rename(columns={'cell_group': 'Celltype'}, inplace=True)
         else:
             print('error celltype column not found to be standardized')
     if 'Subtype' not in adata.obs.columns: #standardizing subtype column name
         if 'subtype' in adata.obs.columns:
             adata.obs.rename(columns={'subtype': 'Subtype'}, inplace=True)
+        elif 'Celltype_inferred' in adata.obs.columns:
+            adata.obs.rename(columns={'Celltype_inferred': 'Subtype'}, inplace=True)
         else:
             adata.obs['Subtype']=np.full(adata.obs.shape[0], "NA")
     if 'Condition' not in adata.obs.columns: #standardizing condition column name
@@ -54,16 +52,23 @@ for adata in [BD, SZ]:
         else:
             print('error condition/phenotype column not found to be standardized')
     if 'Age' not in adata.obs.columns:
-         adata.obs['Age'] = pd.Series([pd.NA] * adata.obs.shape[0], dtype='Int64')
+        if 'age' in adata.obs.columns:
+            adata.obs.rename(columns={'age': 'Age'}, inplace=True)
+        else:
+            adata.obs['Age'] = pd.Series([pd.NA] * adata.obs.shape[0], dtype='Int64')
     else:
-         adata.obs.Age=adata.obs.Age.round().astype('Int64') #BD does not include age column only SZ
+         adata.obs.Age=adata.obs.Age.round().astype('Int64') #Original BD did not include age column only SZ
     if 'Individual' not in adata.obs.columns:
         if 'id' in adata.obs.columns:
             adata.obs.rename(columns={'id': 'Individual'}, inplace=True)
+        elif 'SubID' in adata.obs.columns:
+            adata.obs.rename(columns={'SubID': 'Individual'}, inplace=True)
         else:
             print('error individual column not found to be standardized')
     if 'Gender' in adata.obs.columns:
         adata.obs.rename(columns={'Gender': 'Sex'}, inplace=True)
+    elif 'sex' in adata.obs.columns:
+        adata.obs.rename(columns={'sex': 'Sex'}, inplace=True)
     else:
         adata.obs['Sex'] = np.full(adata.obs.shape[0], 'NA') #BD does not include sex column only SZ
     if 'X_pca' not in adata.obsm:
@@ -72,12 +77,18 @@ for adata in [BD, SZ]:
 BD.obs['data_source'] = np.full(BD.obs.shape[0], "Han")
 SZ.obs['data_source'] = np.full(SZ.obs.shape[0], "Ruzicka")
 
-BD_barcodes=BD.obs['Unnamed: 0'].unique()
+try:
+    BD_barcodes=BD.obs_names
+except:
+    try:
+        BD_barcodes=BD.obs['Unnamed: 0'].unique()
+    except:
+        print('missing BD barcodes')
 SZ_barcodes=SZ.obs['Barcodes'].unique()
 overlap_cells = set(SZ_barcodes) & set(BD_barcodes)
-print('Number of Overlapping Cells: ', overlap_cells)
+print('Number of Overlapping Cells: ', len(overlap_cells))
 
-BD = BD[~BD.obs['Unnamed: 0'].isin(overlap_cells)]
+BD = BD[~BD.obs_names.isin(overlap_cells)]
 print('BD shape post removal of cells also in SZ: ', BD.shape)
 
 BD_SZ = an.concat([BD, SZ], join='inner', keys=["Han", "Ruzicka"]) #only choosing overlapping genes (only same column names in obs will be kept!)
