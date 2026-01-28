@@ -85,10 +85,10 @@ def check_adata_format(adatas, batches, data_sources, celltype_colnames, subtype
                 predicted_doublet_idx=[]
                 for batch in batch_ids:
                     print("scrubbing batch: ", batch)
-                    adata_batch=adata[adata.obs["batch"] == batch]
+                    adata_batch=adata[adata.obs["batch"]==batch]
                     sc.pp.scrublet(adata_batch) #performing scrublet on individual batches #may need to look at adjusting number of principal components later
 
-                    predicted_doublet_idx.append(list(adata_batch[adata_batch.obs.predicted_doublet == True].obs.index)) #pulling a list of cell where predicted_doublet is true and adding this to the list of predicted doublet cells for the entire batch
+                    predicted_doublet_idx.append(list(adata_batch[adata_batch.obs.predicted_doublet==True].obs.index)) #pulling a list of cell where predicted_doublet is true and adding this to the list of predicted doublet cells for the entire batch
     
                 flat_predicted_doublet_idx=[cell_id for batch in predicted_doublet_idx for cell_id in batch]
                 print(len(flat_predicted_doublet_idx), ": number of doublets predicted across the dataset ", data_source, "\n")     
@@ -145,7 +145,7 @@ def check_adata_format(adatas, batches, data_sources, celltype_colnames, subtype
                 adata.obs.rename(columns={'Condition': 'Original_Condition'}, inplace=True)
         
                 adata.obs['Condition']=adata.obs['Original_Condition'].map(
-                    lambda x: 'Control' if x == 'CTR' else ('MS' if x in ['PPMS', 'RRMS', 'SPMS'] else x)
+                    lambda x: 'Control' if x=='CTR' else ('MS' if x in ['PPMS', 'RRMS', 'SPMS'] else x)
                     )
             else:
                 print('\n Condition column okay with conditions:', list(adata.obs.Condition.unique()), "\n")
@@ -310,9 +310,9 @@ def mtx_to_adata(counts_path, gene_names_path, metadata_path, genename_col=None,
     elif gene_names_path.endswith('.tsv'):
         genes=pd.read_csv(gene_names_path, sep='\t')
 
-    if len(genes) == adata.shape[1] and len(metadata)==adata.shape[0]:
+    if len(genes)==adata.shape[1] and len(metadata)==adata.shape[0]:
         print('processed counts matrix orientation is correct') #no need to transpose
-    elif len(genes) == adata.shape[0] and len(metadata)==adata.shape[1]:
+    elif len(genes)==adata.shape[0] and len(metadata)==adata.shape[1]:
         print('processed counts matrix is flipped, will need to transpose')
         adata=adata.T
     
@@ -339,9 +339,9 @@ def mtx_to_adata(counts_path, gene_names_path, metadata_path, genename_col=None,
 
     if raw_counts_path !=None:
         raw=sc.read_mtx(raw_counts_path)
-        if len(genes) == raw.shape[1] and len(metadata)==raw.shape[0]:
+        if len(genes)==raw.shape[1] and len(metadata)==raw.shape[0]:
             print('raw counts matrix orientation is correct') #no need to transpose
-        elif len(genes) == raw.shape[0] and len(metadata)==raw.shape[1]:
+        elif len(genes)==raw.shape[0] and len(metadata)==raw.shape[1]:
             print('raw counts matrix is flipped, will need to transpose')
             raw=raw.T
         else:
@@ -361,7 +361,7 @@ def add_gene_names_to_adata(adata):
     server=Server(host='http://www.ensembl.org')
     dataset=Dataset(name='hsapiens_gene_ensembl', host='http://www.ensembl.org')
     ensembl_df=dataset.query(attributes=['ensembl_gene_id', 'external_gene_name'])
-    ensembl_df=ensembl_df[ensembl_df['Gene stable ID'].isin(list(adata.var_names)) == True].dropna()
+    ensembl_df=ensembl_df[ensembl_df['Gene stable ID'].isin(list(adata.var_names))==True].dropna()
     df=pd.Series(ensembl_df['Gene name'].values, index=ensembl_df['Gene stable ID'].values).to_dict()
 
     #Add 'gene_name' to adata
@@ -412,7 +412,7 @@ def plot_celltype_bar(adata, x_col, save_string, colorby=None, percent_true=Fals
     plt.tight_layout()
     plt.figsave(save_string)
 
-def set_celltype_colors(adata=None, celltype_class_col=None, celltype_subtype_col=None, broad=False):
+def set_celltype_colors(adata=None, celltype_class_col=None, celltype_subtype_col=None, broad=False, condition_col=None, datasource_col=None):
     '''
     Used to make colors consistent for subtypes and celltypes across datasets
     '''
@@ -448,7 +448,21 @@ def set_celltype_colors(adata=None, celltype_class_col=None, celltype_subtype_co
         #NA (black)
         'NA': "#000000"
         }
-    if adata==None:
+    condition_colors={"AD": "#8C6BB1", "ASD": "#1f77b4", "BD": "#41AB5D", "Control": "#E31A1C", "SZ": "#969696", "MS": "#FDB462"}
+    datasource_colors={"Mathys": "#8C6BB1", "Wamsley": "#1f77b4", "Han": "#41AB5D", "Ruzicka": "#969696", "Macnair": "#FDB462"}
+    if celltype_class_col:
+        if not adata.obs[celltype_class_col].dtype.name=="category":
+            adata.obs[celltype_class_col]=adata.obs[celltype_class_col].astype("category")
+    if celltype_subtype_col:
+        if not adata.obs[celltype_subtype_col].dtype.name=="category":
+            adata.obs[celltype_subtype_col]=adata.obs[celltype_subtype_col].astype("category")
+    if datasource_col:
+        if not adata.obs[datasource_col].dtype.name=="category":
+            adata.obs[datasource_col]=adata.obs[datasource_col].astype("category")
+    if condition_col:
+        if not adata.obs[condition_col].dtype.name=="category":
+            adata.obs[condition_col]=adata.obs[condition_col].astype("category")
+    if adata is None:
         if broad==False:
             return(subtype_colors)
         else:
@@ -524,9 +538,9 @@ def basic_preprocess(adata, batch_col=None, scrub=None, human=True):
                 predicted_doublet_idx=[]
                 for batch in batch_ids:
                     print("scrubbing batch: ", batch)
-                    adata_batch=adata[adata.obs["batch"] == batch]
+                    adata_batch=adata[adata.obs["batch"]==batch]
                     sc.pp.scrublet(adata_batch) #performing scrublet on individual batches #may need to look at adjusting number of principal components later
-                    predicted_doublet_idx.append(list(adata_batch[adata_batch.obs.predicted_doublet == True].obs.index)) #pulling a list of cell where predicted_doublet is true and adding this to the list of predicted doublet cells for the entire batch
+                    predicted_doublet_idx.append(list(adata_batch[adata_batch.obs.predicted_doublet==True].obs.index)) #pulling a list of cell where predicted_doublet is true and adding this to the list of predicted doublet cells for the entire batch
     
                 flat_predicted_doublet_idx=[cell_id for batch in predicted_doublet_idx for cell_id in batch]
                 print(len(flat_predicted_doublet_idx), ": number of doublets predicted across the dataset ", "\n")     
