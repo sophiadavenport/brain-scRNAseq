@@ -3,9 +3,7 @@ configfile: "config.yaml"
 OUTPUT_PATH=config["output_path"]
 AD_H5AD=config["AD_h5ad"]
 AD_METADATA=config["AD_metadata"]
-BD_COUNTS=config["BD_counts"]
-BD_GENENAMES=config["BD_genenames"]
-BD_METADATA=config["BD_metadata"]
+BD_H5AD=config["BD_h5ad"]
 SZ_COUNTS=config["SZ_counts"]
 SZ_GENENAMES=config["SZ_genenames"]
 SZ_METADATA=config["SZ_metadata"]
@@ -16,18 +14,18 @@ ASD_H5AD=config["ASD_h5ad"]
 
 rule all:
     input:
-        "results/ADASDBDMSSZ_full_unified_celltype_umap.png", "results/common_gene_list.csv", "results/annotations_qc_report.txt", f"{OUTPUT_PATH}/ADASDBDMSSZ_processed.h5ad"
+        "results/ADASDBDMSSZ_full_unified_celltype_umap.pdf", "results/common_gene_list.csv", "results/annotations_qc_report.txt", f"{OUTPUT_PATH}/ADASDBDMSSZ_processed.h5ad"
 
 rule filter_BD_SZ: #BD and SZ data must be filtered first since they have overlapping cells
     input:
-       BD_counts=BD_COUNTS, BD_metadata=BD_METADATA, BD_genenames=BD_GENENAMES, SZ_counts=SZ_COUNTS, SZ_metadata=SZ_METADATA, SZ_genenames=SZ_GENENAMES
+       BD_adata=BD_H5AD, SZ_counts=SZ_COUNTS, SZ_metadata=SZ_METADATA, SZ_genenames=SZ_GENENAMES
     output:
-        BDSZ_intermediate=temp(f"intermediate/BDSZ_preqccheck.h5ad")
+        BDSZ_intermediate=temp("intermediate/BDSZ_preqccheck.h5ad")
     conda:
         "envs/scanpy.yaml"
     shell:
         """
-        python filter_BD_SZ.py --BD_counts {input.BD_counts} --BD_metadata {input.BD_metadata} --BD_genenames {input.BD_genenames} --SZ_counts {input.SZ_counts} --SZ_metadata {input.SZ_metadata} --SZ_genenames {input.SZ_genenames} --output {output.BDSZ_intermediate}
+        python filter_BD_SZ.py --BD_adata {input.BD_adata} --SZ_counts {input.SZ_counts} --SZ_metadata {input.SZ_metadata} --SZ_genenames {input.SZ_genenames} --output {output.BDSZ_intermediate}
         """
 
 rule QC_check: #runs a QC check but also will output a list of genes that will be kept in each dataset
@@ -84,7 +82,7 @@ rule umaps:
     input:
         joined_adata=f"{OUTPUT_PATH}/ADASDBDMSSZ_processed.h5ad"
     output:
-        celltype_umap_tracked="results/ADASDBDMSSZ_full_unified_celltype_umap.png"
+        celltype_umap_tracked="results/ADASDBDMSSZ_full_unified_celltype_umap.pdf"
     conda:
         "envs/scanpy.yaml"
     shell:
