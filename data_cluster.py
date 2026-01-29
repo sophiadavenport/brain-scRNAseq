@@ -1,6 +1,7 @@
 #run in scanpy env
 import scanpy as sc
 import argparse
+import scanpy_helper_functions as sh # type: ignore
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--joined_adata", required=True, help="Joined adata from join_adataspy (does not have umap rerun yet)")
@@ -26,5 +27,7 @@ sc.pl.pca_variance_ratio(adata_combined, n_pcs=50, log=True) #pca plot
 sc.external.pp.harmony_integrate(adata_combined, key='datasource')
 sc.pp.neighbors(adata_combined, use_rep='X_pca_harmony')
 sc.tl.umap(adata_combined)
+
+adata_combined=sh.set_celltype_colors(adata=adata_combined, celltype_class_col='Celltype_Class', celltype_subtype_col='unified_subtype')
 
 adata_combined.write(args.joined_outfile)
