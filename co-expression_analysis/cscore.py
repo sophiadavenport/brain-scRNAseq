@@ -20,11 +20,11 @@ def write_empty_outputs(prefix):
     for suffix in ["_coexpr.csv", "_pvals.csv", "_teststats.csv", "_genes.csv"]:
         np.savetxt(f"{prefix}{suffix}", np.array([]))
 
-adata=sc.read_h5ad(args.adata)
+adata=sc.read_h5ad(args.adata, backed='r')
 
 adata.obs["Celltype_clean"]=adata.obs[args.celltype_col].astype(str).str.replace(r" \+ ", "_", regex=True).str.replace(r" ", "_", regex=True).str.replace(r"\(", "", regex=True).str.replace(r"\)", "", regex=True).str.replace("/", "-")
 
-cell_adata=adata[adata.obs["Celltype_clean"]==args.current_celltype, :]
+cell_adata=adata[adata.obs["Celltype_clean"]==args.current_celltype, :].to_memory()
 
 print(cell_adata.shape)
 cell_adata=cell_adata.copy() #clean copy
